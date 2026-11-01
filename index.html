@@ -6,6 +6,12 @@
 <meta name="robots" content="noindex">
 <title>Pulpit MC</title>
 <meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="ikony/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Pulpit MC">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%23f0a640%22/%3E%3Ctext x=%2232%22 y=%2243%22 font-size=%2230%22 text-anchor=%22middle%22 font-family=%22sans-serif%22 font-weight=%22700%22 fill=%22%231a1206%22%3EMC%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1084,7 +1090,9 @@ function authHtml(){
     ${denied ? `<p>Konto <b>${esc(ME ? ME.email : '')}</b> nie ma dostępu. Poproś Tymka, żeby dodał ten adres, albo zaloguj się innym kontem.</p>
       <button type="button" class="btn big" data-act="logout">Wyloguj i wybierz inne konto</button>`
     : `<p>Plany i notatki MC dla Beloved, Source Youth i SUM. Dostęp mają tylko osoby dodane przez Tymka.</p>
-      <button type="button" class="btn primary big" data-act="login">Zaloguj się kontem Google</button>`}
+      <button type="button" class="btn primary big" data-act="login"${S.loggingIn ? ' disabled' : ''}>${S.loggingIn ? 'Loguję…' : 'Zaloguj się kontem Google'}</button>
+      ${S.loginSlow ? `<p>Logowanie trwa długo? Jeśli okno Google się zamknęło, a tu nic się nie dzieje, dotknij poniżej. Na iPhonie z ikony na ekranie pomaga też całkowite zamknięcie aplikacji i otwarcie jej jeszcze raz.</p>
+        <button type="button" class="btn big" data-act="login-retry">Spróbuj ponownie</button>` : ''}`}
   </div></main>`;
 }
 function addPerson(){
@@ -1229,6 +1237,7 @@ document.addEventListener('click', e => {
     case 'insert-ann': S.sheet = { type: 'ann-pick', itemId: r.item.id }; render(); break;
     case 'pick-ann': insertAnn(S.ann[a.dataset.aid]); break;
     case 'login': login(); break;
+    case 'login-retry': S.loggingIn = false; S.loginSlow = false; login(); break;
     case 'logout': logout(); break;
     case 'account': S.sheet = { type: 'account' }; render(); break;
     case 'people': S.sheet = { type: 'people' }; render(); break;
@@ -1373,7 +1382,13 @@ async function onUser(u){
   if (IS_ADMIN) subscribePeople();
   render();
 }
+let loginT = null;
 async function login(){
+  S.loggingIn = true; S.loginSlow = false; render();
+  clearTimeout(loginT); loginT = setTimeout(() => { if (S.mode === 'auth') { S.loginSlow = true; render(); } }, 12000);
+  try { await loginInner(); } finally { clearTimeout(loginT); S.loggingIn = false; if (S.mode === 'auth') render(); }
+}
+async function loginInner(){
   const p = new F.GoogleAuthProvider();
   p.setCustomParameters({ prompt: 'select_account' });
   try { await F.signInWithPopup(AUTH, p); }

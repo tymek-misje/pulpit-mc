@@ -58,7 +58,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .sync.s-saving::before{background:var(--accent)}
 .sync.s-offline::before,.sync.s-error::before,.sync.s-local::before{background:var(--danger)}
 
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;background:var(--surface-2);border-radius:var(--r)}
+.tabs{display:grid;grid-template-columns:1fr 1.25fr .8fr .8fr;gap:4px;padding:4px;background:var(--surface-2);border-radius:var(--r)}
 .tab{min-height:48px;border:0;border-radius:9px;background:transparent;font-weight:700;font-size:15px;cursor:pointer;color:var(--ink-2)}
 .tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 
@@ -159,6 +159,20 @@ body.is-dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
 .check-list input{width:22px;height:22px;accent-color:var(--accent);flex:0 0 auto}
 .check-list small{display:block;color:var(--ink-2);font-size:13px;overflow-wrap:anywhere}
 .check-list span{min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{min-height:40px;padding:0 12px;border-radius:20px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip span{color:var(--ink-2);font-weight:400}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.chip input{accent-color:var(--accent);width:18px;height:18px;margin:0}
+fieldset.fld{border:0;padding:0;margin:0}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--surface-2);border-radius:var(--r)}
+.seg-b{min-height:40px;border:0;border-radius:8px;background:transparent;font-weight:700;color:var(--ink-2);cursor:pointer}
+.seg-b[aria-pressed="true"]{background:var(--surface);color:var(--ink)}
+.game-card{grid-template-columns:1fr}
+.game-tags{display:flex;flex-wrap:wrap;gap:4px}
+.hint{margin:0;color:var(--ink-2);font-size:14px}
+.tab{padding:0 4px;line-height:1.15}
+.sheet .sp{flex:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -409,7 +423,7 @@ function templateSum(){ return [
 function cloneItems(items){ return clone(items).map(function re(it){ it.id = rid(); if (it.children) it.children = it.children.map(re); return it; }); }
 
 const S = {
-  mode: 'loading', loaded: false, meetings: {}, zjazdy: {}, people: {}, view: 'home', tab: lsGet('mc-tab') || 'beloved',
+  mode: 'loading', loaded: false, meetings: {}, zjazdy: {}, games: {}, ann: {}, people: {}, view: 'home', tab: lsGet('mc-tab') || 'beloved',
   openId: null, expanded: new Set(), showPast: false, sheet: null, undo: [], sync: 'loading', needsRender: false, confirm: null,
 };
 let FDB = null, AUTH = null, ME = null, IS_ADMIN = false, stopStage = null;
@@ -423,7 +437,7 @@ function newMembers(zid){
 }
 
 /* ---------- Zapis (Firestore zapisuje najpierw w telefonie, potem wysyła) ---------- */
-function saveCache(){ lsSet(cacheKey(), JSON.stringify({ meetings: S.meetings, zjazdy: S.zjazdy })); }
+function saveCache(){ lsSet(cacheKey(), JSON.stringify({ meetings: S.meetings, zjazdy: S.zjazdy, games: S.games, ann: S.ann })); }
 const pend = new Map(); let flushT = null;
 function persist(kind, id){
   const obj = S[kind][id];
@@ -461,7 +475,8 @@ window.addEventListener('offline', syncFromMeta);
 
 function subscribe(kind){
   const col = F.collection(FDB, kind);
-  const q = IS_ADMIN ? col : F.query(col, F.where('members', 'array-contains', ME.email));
+  const shared = kind === 'games' || kind === 'ann';
+  const q = IS_ADMIN || shared ? col : F.query(col, F.where('members', 'array-contains', ME.email));
   unsubs.push(F.onSnapshot(q, { includeMetadataChanges: true }, snap => {
     hasPending[kind] = snap.metadata.hasPendingWrites;
     if (snap.metadata.fromCache && snap.empty) { syncFromMeta(); return; }
@@ -490,6 +505,7 @@ function purgeOld(){
   const lim = Date.now() - 30 * 864e5;
   Object.values(S.meetings).forEach(m => { if (m.deletedAt && m.deletedAt < lim) { delete S.meetings[m.id]; persist('meetings', m.id); } });
   Object.values(S.zjazdy).forEach(z => { if (z.deletedAt && z.deletedAt < lim) { delete S.zjazdy[z.id]; persist('zjazdy', z.id); } });
+  if (IS_ADMIN || S.mode === 'local') ['games', 'ann'].forEach(k => Object.values(S[k]).forEach(o => { if (o.deletedAt && o.deletedAt < lim) { delete S[k][o.id]; persist(k, o.id); } }));
 }
 
 const SYNC_LABEL = { loading:'Wczytuję…', saving:'Zapisuję…', saved:'Zapisano', offline:'Bez internetu: zmiany czekają w telefonie', error:'Błąd zapisu', local:'Zapis tylko w tej przeglądarce' };
@@ -564,9 +580,9 @@ document.addEventListener('focusout', () => setTimeout(() => { const a = documen
 function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
 
 function homeHtml(){
-  const tabs = `<nav class="tabs" role="tablist" aria-label="Inicjatywy">${['beloved','source','sum'].map(k => `<button type="button" role="tab" aria-selected="${S.tab === k}" class="tab" data-act="tab" data-k="${k}">${INIT[k].name}</button>`).join('')}</nav>`;
+  const tabs = `<nav class="tabs" role="tablist" aria-label="Inicjatywy">${['beloved','source','sum','base'].map(k => `<button type="button" role="tab" aria-selected="${S.tab === k}" class="tab" data-act="tab" data-k="${k}">${k === 'base' ? 'Baza' : INIT[k].name}</button>`).join('')}</nav>`;
   return `<header class="bar"><h1 class="brand">Pulpit MC</h1><span class="sp"></span>${syncHtml()}${ME ? `<button type="button" class="avatar" data-act="account" aria-label="Konto: ${esc(ME.email)}">${esc((ME.name || ME.email).trim().charAt(0).toUpperCase())}</button>` : ''}</header>
-  <main class="wrap">${tabs}${S.tab === 'sum' ? sumHtml() : listHtml(S.tab)}${homeTrashHtml()}
+  <main class="wrap">${tabs}${S.tab === 'base' ? baseHtml() : S.tab === 'sum' ? sumHtml() : listHtml(INIT[S.tab] ? S.tab : 'beloved')}${homeTrashHtml()}
     ${IS_ADMIN || S.mode === 'local' ? '<div class="foot-tools"><button type="button" class="btn ghost sm" data-act="backup">Kopia zapasowa wszystkich danych (JSON)</button></div>' : ''}
   </main>`;
 }
@@ -660,11 +676,14 @@ function zjazdHtml(z){
 function homeTrashHtml(){
   const ms = Object.values(S.meetings).filter(m => m.deletedAt);
   const zs = Object.values(S.zjazdy).filter(z => z.deletedAt);
-  if (!ms.length && !zs.length) return '';
+  const gs = Object.values(S.games).filter(g => g.deletedAt), as = Object.values(S.ann).filter(a => a.deletedAt);
+  if (!ms.length && !zs.length && !gs.length && !as.length) return '';
   const row = (kind, o, label) => `<li data-kind="${kind}" data-oid="${o.id}"><div>${esc(label)}<small>usunięto ${fmtStamp(o.deletedAt)}, zniknie po 30 dniach</small></div>
     <div class="row"><button type="button" class="btn sm" data-act="restore">Przywróć</button>
-    <button type="button" class="btn sm danger-ghost" data-act="purge">${S.confirm === o.id ? 'Na pewno? Usuń' : 'Usuń na zawsze'}</button></div></li>`;
-  return `<details class="trash"${S.confirm ? ' open' : ''}><summary>Kosz (${ms.length + zs.length})</summary><ul class="trash-list">
+    ${(kind === 'games' || kind === 'ann') && !IS_ADMIN && S.mode !== 'local' ? '' : `<button type="button" class="btn sm danger-ghost" data-act="purge">${S.confirm === o.id ? 'Na pewno? Usuń' : 'Usuń na zawsze'}</button>`}</div></li>`;
+  return `<details class="trash"${S.confirm ? ' open' : ''}><summary>Kosz (${ms.length + zs.length + gs.length + as.length})</summary><ul class="trash-list">
+    ${gs.map(g => row('games', g, 'Gra: ' + (g.title || 'Bez nazwy'))).join('')}
+    ${as.map(a => row('ann', a, 'Ogłoszenie: ' + (a.title || 'Bez nazwy'))).join('')}
     ${zs.map(z => row('zjazdy', z, 'Zjazd: ' + (z.title || 'Zjazd'))).join('')}
     ${ms.map(m => row('meetings', m, INIT[m.initiative].name + ': ' + (m.title || 'Bez nazwy') + (m.date ? ' (' + shortDate(m.date) + ')' : ''))).join('')}
   </ul></details>`;
@@ -750,6 +769,7 @@ function panelHtml(it, i, n){
       <button type="button" class="btn sm" data-act="stage-here" ${it.hidden ? 'disabled' : ''}>▶ Scena od tego punktu</button>
       <button type="button" class="btn sm" data-act="hide">${it.hidden ? 'Pokaż' : 'Ukryj'}</button>
       ${it.kind === 'block' ? '<button type="button" class="btn sm" data-act="add-child">+ Podpunkt</button>' : ''}
+      ${it.kind !== 'divider' ? '<button type="button" class="btn sm" data-act="insert-game">🎳 Wstaw grę</button><button type="button" class="btn sm" data-act="insert-ann">📣 Wstaw ogłoszenie</button>' : ''}
       <button type="button" class="btn sm danger-ghost" data-act="delete">Usuń</button>
     </div>
   </div>`;
@@ -790,6 +810,10 @@ function sheetHtml(){
         <button type="button" class="btn sm" data-act="restore-version">Przywróć</button></li>`).join('')}</ul>` : '<p class="empty">Brak zapisanych wersji. Pierwsza powstanie przy pierwszej zmianie planu.</p>'}
       <div class="row"><button type="button" class="btn" data-act="sheet-close">Zamknij</button></div>`;
   }
+  else if (s.type === 'game') { const g = S.games[s.gid]; inner = g ? gameSheetHtml(g) : ''; }
+  else if (s.type === 'game-pick') inner = gamePickHtml();
+  else if (s.type === 'ann') { const a = S.ann[s.aid]; inner = a ? annSheetHtml(a) : ''; }
+  else if (s.type === 'ann-pick') inner = annPickHtml();
   else if (s.type === 'account') {
     inner = `<h2>Konto</h2><p>Zalogowano jako <b>${esc(ME ? ME.email : '')}</b>${IS_ADMIN ? ' (administrator)' : ''}.</p>
       ${IS_ADMIN ? `<div class="row" style="justify-content:flex-start"><button type="button" class="btn" data-act="people">Osoby z dostępem (${Object.keys(S.people).length})</button>
@@ -815,6 +839,158 @@ function sheetHtml(){
       <div class="row"><button type="button" class="btn" data-act="people">Osoby z dostępem</button><button type="button" class="btn primary" data-act="sheet-close">Gotowe</button></div>`;
   }
   return `<div class="sheet-bg" data-act="sheet-bg"><div class="sheet" role="dialog" aria-modal="true">${inner}</div></div>`;
+}
+
+/* ---------- Baza gier i ogłoszeń (wspólna dla wszystkich osób z dostępem) ---------- */
+const GAME_CATS = { gra: 'Gra', ice: 'Ice breaker', team: 'Team building', taniec: 'Taniec' };
+const ENERGY = { spokojna: 'Spokojna', srednia: 'Średnia energia', wysoka: 'Wysoka energia' };
+const gameHasDesc = g => !!((g.rules || '').trim() || (g.link || '').trim());
+function gameLastUsed(gid){
+  let best = null;
+  Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date) return; (m.items || []).forEach(function w(it){ if (it.gameId === gid && (!best || m.date > best.date)) best = m; (it.children || []).forEach(w); }); });
+  return best;
+}
+function gameMeta(g){
+  return [GAME_CATS[g.cat] || '', g.energy ? ENERGY[g.energy] : '', hasMin(g.minutes) ? g.minutes + ' min' : '', g.people || ''].filter(Boolean);
+}
+function gameCardHtml(g, pick){
+  const last = gameLastUsed(g.id), q = norm((S.gq || '').trim());
+  const snip = q && !norm(g.title).includes(q) ? [g.rules, g.prep, g.place, g.notes].map(f => f && snippet(f, q)).find(Boolean) : '';
+  return `<button type="button" class="card game-card" data-act="${pick ? 'pick-game' : 'open-game'}" data-gid="${g.id}">
+    <span class="card-title">${esc(g.title || 'Bez nazwy')}</span>
+    <span class="game-tags">${gameMeta(g).map(t => `<span class="tag">${esc(t)}</span>`).join('')}${gameHasDesc(g) ? '' : '<span class="tag gap">brak opisu</span>'}${g.link ? '<span class="tag">link</span>' : ''}</span>
+    ${last ? `<span class="card-sub">ostatnio: ${esc(INIT[last.initiative].name)} ${shortDate(last.date)}</span>` : ''}
+    ${snip ? `<span class="card-snip">${snip}</span>` : ''}
+  </button>`;
+}
+function filteredGames(){
+  const q = norm((S.gq || '').trim()), cat = S.gcat || '';
+  return Object.values(S.games).filter(g => !g.deletedAt)
+    .filter(g => !cat || (cat === 'brak' ? !gameHasDesc(g) : g.cat === cat))
+    .filter(g => !q || [g.title, g.rules, g.prep, g.place, g.notes, g.people, GAME_CATS[g.cat]].some(f => f && norm(f).includes(q)))
+    .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'pl'));
+}
+function gameResults(pick){
+  const gs = filteredGames();
+  return gs.length ? gs.map(g => gameCardHtml(g, pick)).join('') : `<p class="empty">${Object.keys(S.games).length ? 'Nic nie znaleziono.' : 'Baza gier jest pusta.'}</p>`;
+}
+function gameFilterHtml(){
+  const all = Object.values(S.games).filter(g => !g.deletedAt);
+  const chips = [['', 'Wszystkie', all.length], ...Object.entries(GAME_CATS).map(([k, v]) => [k, v, all.filter(g => g.cat === k).length]), ['brak', 'Brak opisu', all.filter(g => !gameHasDesc(g)).length]];
+  return `<input type="search" class="search" id="gq" data-gq value="${esc(S.gq || '')}" placeholder="Szukaj gry po nazwie i opisie" aria-label="Szukaj gry">
+    <div class="chips" role="group" aria-label="Kategoria">${chips.filter(c => c[2] || c[0] === '').map(([k, v, n]) => `<button type="button" class="chip" data-act="gcat" data-k="${k}" aria-pressed="${(S.gcat || '') === k}">${esc(v)} <span>${n}</span></button>`).join('')}</div>`;
+}
+function baseHtml(){
+  const seg = `<div class="seg" role="group" aria-label="Baza">${[['gry', 'Gry'], ['ogl', 'Ogłoszenia']].map(([k, v]) => `<button type="button" class="seg-b" data-act="base-tab" data-k="${k}" aria-pressed="${(S.baseTab || 'gry') === k}">${v}</button>`).join('')}</div>`;
+  if ((S.baseTab || 'gry') === 'ogl') return seg + annHtml();
+  const empty = !Object.values(S.games).some(g => !g.deletedAt);
+  return seg + `<button type="button" class="btn primary big" data-act="new-game">+ Nowa gra</button>
+    ${empty && (IS_ADMIN || S.mode === 'local') && S.loaded ? `<div class="banner"><span>Wczytaj ${GAMES_SEED.length} gier, ice breakerów i tańców z notatki „GRY NA MŁO”. Opisy uzupełnisz potem.</span><button type="button" class="btn sm" data-act="seed-games">Wczytaj</button></div>` : ''}
+    ${gameFilterHtml()}<div class="cards" id="game-results">${gameResults(false)}</div>`;
+}
+function gameSheetHtml(g){
+  const f = (k, label, ph = '', type = 'text') => `<label class="fld"><span>${label}</span><input id="g-${g.id}-${k}" data-gf="${k}" type="${type}" value="${esc(g[k] ?? '')}" placeholder="${esc(ph)}"${type === 'number' ? ' inputmode="numeric" min="0"' : ''}></label>`;
+  const t = (k, label, ph = '') => `<label class="fld"><span>${label}</span><textarea id="g-${g.id}-${k}" data-gf="${k}" rows="2" placeholder="${esc(ph)}">${esc(g[k] || '')}</textarea></label>`;
+  const sel = (k, label, opts) => `<label class="fld"><span>${label}</span><select id="g-${g.id}-${k}" data-gf="${k}"><option value="">nie wybrano</option>${Object.entries(opts).map(([v, n]) => `<option value="${v}"${g[k] === v ? ' selected' : ''}>${n}</option>`).join('')}</select></label>`;
+  const last = gameLastUsed(g.id);
+  return `<h2>${esc(g.title || 'Nowa gra')}</h2>
+    ${gameHasDesc(g) ? '' : '<p><span class="tag gap">brak opisu</span> Dopisz zasady albo link, gdy będziesz je mieć.</p>'}
+    ${f('title', 'Nazwa')}
+    <div class="meta-row">${sel('cat', 'Kategoria', GAME_CATS)}${sel('energy', 'Energia', ENERGY)}</div>
+    <div class="meta-row">${f('minutes', 'Czas (min)', '', 'number')}${f('people', 'Ile osób', 'np. 10+')}</div>
+    ${f('place', 'Miejsce', 'sala, krzesła w kółku, na zewnątrz…')}
+    ${t('prep', 'Przygotowanie i sprzęt', 'piłka, karteczki, ile osób prowadzi…')}
+    ${t('rules', 'Zasady', 'Jak się gra, krok po kroku')}
+    ${f('link', 'Link do filmu lub opisu', 'https://…', 'url')}
+    ${g.link && /^https?:\/\//.test(g.link) ? `<a class="btn sm" href="${esc(g.link)}" target="_blank" rel="noopener">Otwórz link ↗</a>` : ''}
+    ${t('notes', 'Uwagi', 'Co zadziałało, czego unikać')}
+    ${last ? `<p>Ostatnio w planie: ${esc(INIT[last.initiative].name)} ${fmtDate(last.date)}.</p>` : ''}
+    <div class="row"><button type="button" class="btn danger-ghost" data-act="del-game">Przenieś do kosza</button><span class="sp"></span><button type="button" class="btn primary" data-act="sheet-close">Gotowe</button></div>`;
+}
+function gamePickHtml(){
+  return `<h2>Wstaw grę</h2><p>Gra trafi do planu z czasem i zasadami. Opis w bazie zostaje bez zmian.</p>
+    ${gameFilterHtml()}<div class="cards" id="game-results">${gameResults(true)}</div>
+    <div class="row"><button type="button" class="btn" data-act="sheet-close">Anuluj</button></div>`;
+}
+function insertGame(g){
+  const m = cur(), r = S.sheet && S.sheet.itemId && find(m, S.sheet.itemId); if (!m || !r) return;
+  pushUndo(m, 'wstawienie gry');
+  const text = [g.rules, g.prep ? 'Przygotowanie: ' + g.prep : '', g.link ? 'Link: ' + g.link : ''].filter(Boolean).join('\n');
+  const fill = it => { it.title = g.title; it.gameId = g.id; if (!hasMin(it.minutes) && hasMin(g.minutes)) it.minutes = g.minutes; if (!it.note && text) it.note = text; };
+  let target = r.item;
+  if (r.item.kind === 'block') {
+    const generic = (r.item.children || []).find(c => /^gra$/i.test((c.title || '').trim()) && !c.gameId);
+    if (generic) target = generic; else { target = P(''); r.item.children.push(target); }
+  }
+  fill(target); S.expanded.add(target.id);
+  persist('meetings', m.id); S.sheet = null; render(); toast('Wstawiono „' + g.title + '”.', 'Cofnij', doUndo);
+}
+
+/* Ogłoszenia: krótki tekst z datą ważności, do wstawienia w plan. */
+function annActive(a, date){ return !a.deletedAt && (!a.until || a.until >= (date || todayStr())); }
+function annHtml(){
+  const as = Object.values(S.ann).filter(a => !a.deletedAt).sort((a, b) => (a.until || '9').localeCompare(b.until || '9'));
+  const act = as.filter(a => annActive(a)), old = as.filter(a => !annActive(a));
+  const card = a => `<button type="button" class="card" data-act="open-ann" data-aid="${a.id}">
+    <span class="card-date">${a.until ? 'ważne do ' + fmtDate(a.until) : 'bez daty końca'}</span>
+    <span class="card-title">${esc(a.title || 'Bez nazwy')}</span>
+    <span class="card-sub">${esc([(a.inits || []).map(k => INIT[k] && INIT[k].name).filter(Boolean).join(', ') || 'wszystkie', (a.text || '').replace(/\s+/g, ' ').slice(0, 90)].filter(Boolean).join(' · '))}</span></button>`;
+  return `<button type="button" class="btn primary big" data-act="new-ann">+ Nowe ogłoszenie</button>
+    <p class="hint">Wpisz ogłoszenie raz, z datą ważności. W planie wstawisz je przyciskiem „📣 Wstaw ogłoszenie”. Po dacie trafia do archiwum poniżej.</p>
+    ${act.length ? `<div class="cards">${act.map(card).join('')}</div>` : '<p class="empty">Brak aktualnych ogłoszeń.</p>'}
+    ${old.length ? `<details class="trash"><summary>Po terminie (${old.length})</summary><div class="cards" style="padding:0 var(--s4) var(--s4)">${old.map(card).join('')}</div></details>` : ''}`;
+}
+function annSheetHtml(a){
+  return `<h2>${esc(a.title || 'Nowe ogłoszenie')}</h2>
+    <label class="fld"><span>Tytuł</span><input id="a-${a.id}-title" data-af="title" value="${esc(a.title || '')}" placeholder="np. Wyjazd w styczniu"></label>
+    <label class="fld"><span>Do powiedzenia</span><textarea id="a-${a.id}-text" data-af="text" rows="3" placeholder="Co mówisz ze sceny">${esc(a.text || '')}</textarea></label>
+    <label class="fld"><span>Ważne do</span><input id="a-${a.id}-until" data-af="until" type="date" value="${esc(a.until || '')}"></label>
+    <fieldset class="fld"><span>Gdzie ogłaszać</span><div class="chips">${Object.entries(INIT).map(([k, v]) => `<label class="chip"><input type="checkbox" data-ainit="${k}"${(a.inits || []).includes(k) ? ' checked' : ''}> ${v.name}</label>`).join('')}</div></fieldset>
+    <div class="row"><button type="button" class="btn danger-ghost" data-act="del-ann">Przenieś do kosza</button><span class="sp"></span><button type="button" class="btn primary" data-act="sheet-close">Gotowe</button></div>`;
+}
+function annPickHtml(){
+  const m = cur();
+  const as = Object.values(S.ann).filter(a => annActive(a, m.date) && (!(a.inits || []).length || a.inits.includes(m.initiative)));
+  return `<h2>Wstaw ogłoszenie</h2><p>Aktualne na ${fmtDate(m.date)} dla ${esc(INIT[m.initiative].name)}.</p>
+    ${as.length ? `<div class="cards">${as.map(a => `<button type="button" class="card" data-act="pick-ann" data-aid="${a.id}"><span class="card-title">${esc(a.title || 'Bez nazwy')}</span><span class="card-sub">${esc((a.text || '').slice(0, 120))}</span></button>`).join('')}</div>` : '<p class="empty">Brak aktualnych ogłoszeń. Dodaj je w zakładce Baza → Ogłoszenia.</p>'}
+    <div class="row"><button type="button" class="btn" data-act="sheet-close">Anuluj</button></div>`;
+}
+function insertAnn(a){
+  const m = cur(), r = S.sheet && S.sheet.itemId && find(m, S.sheet.itemId); if (!m || !r) return;
+  pushUndo(m, 'wstawienie ogłoszenia');
+  const it = P(a.title, { say: a.text || '', annId: a.id });
+  const list = r.item.kind === 'block' ? r.item.children : r.list;
+  list.splice(r.item.kind === 'block' ? list.length : r.index + 1, 0, it);
+  S.expanded.add(it.id); persist('meetings', m.id); S.sheet = null; render(); toast('Wstawiono „' + (a.title || 'ogłoszenie') + '”.', 'Cofnij', doUndo);
+}
+
+const GAMES_SEED = [
+  ['gra', 'Morderca 🧑‍🦯🕵🏻‍♂️'], ['gra', 'Piłeczka / królestwo jungli / znaki 👋⚾️🦁', 'W praktyce: znaki.'], ['gra', 'Mafia 🕵🏻‍♂️'],
+  ['gra', 'Karty: mao itp. 🃏'], ['gra', 'Chalabała / koniki 🐎🎁'], ['gra', 'Samuraj 🎎 / pif-paf 🔫'], ['gra', 'Ninja 🥷'], ['gra', 'Planszówki'],
+  ['gra', 'Zręcznościówki', 'Jungle Speed, Uno, Avocado Smash, wojna egipska.'], ['gra', 'Goryle 💪'], ['gra', 'Łap i głoś 🗣️'],
+  ['gra', 'Counting stars 🧮⭐️'], ['gra', 'Kontakt 🤙'], ['gra', 'Morderca: oczko w kółku', 'Wersja z chodzeniem.'],
+  ['gra', 'Tornado w kółku 🌪️', 'Po kolei łapią się kolejne osoby, a potem kto pierwszy usiądzie.'], ['gra', 'Oczko (krzesełka) 😉🪑'],
+  ['gra', 'Głowa… kolana… BUT! 👞'], ['gra', 'Just Dance 💃'], ['gra', '1, 2… 3: wszyscy na kogoś patrzą', 'Kontakt wzrokowy = 💀 / 😱🗣️'],
+  ['gra', 'Krzesełka z bieganiem po piłkę'], ['gra', 'Krzesła, liczby, rzucanie butami w butelkę 👟🏀'], ['gra', 'Kalambury'],
+  ['gra', 'Skaczesz w lewo, krzyczysz w prawo'], ['gra', 'Pojedynek na pytania', 'Odpowiadasz pytaniem na pytanie.'], ['gra', 'Ciepło-zimno z wyzwaniami'],
+  ['gra', 'Balony przy kostkach'], ['gra', 'Ochrona „prezydenta” przed piłką', '', 'https://m.youtube.com/shorts/qgp3-utwUtM'],
+  ['gra', 'Kółko z koszem na środku', 'Pociąganie innych w kosz na środku.', 'https://youtu.be/fRBdFE9bSyQ?si=pMVsGB6qyBOnRZPE'],
+  ['gra', 'Nie usiądź w tym samym czasie', '', 'https://pl.pinterest.com/pin/1477812374884747/'], ['gra', 'Państwa-miasta'], ['gra', 'Strzelanie do ludzi z nerfa'],
+  ['gra', 'Klub detektywów w grupach'], ['gra', 'Kogo więcej w środku (🙎‍♂️ vs 🙎‍♀️)'], ['gra', 'Moje krzesło'], ['gra', 'Name swap'],
+  ['gra', 'Speed dating', 'Dwa kółka, jedno wokół drugiego, szybkie pytania na poznanie się.'], ['gra', 'Teams impostor', 'Klub detektywów na żywo.'],
+  ['gra', 'Rysowanie po hasłach', 'Kolejne osoby dorysowują kolejne elementy. Wyścig i tworzenie obrazu.'],
+  ['gra', 'Znajdź werset z zamkniętymi oczami', 'Pary: jedna osoba szuka bez patrzenia, druga wskazuje, gdzie wertować. Można połączyć z wersetami z nauczania.'],
+  ['gra', 'Zgadnij księgę po obr…', '', '', 'Nazwa ucięta w notatce, uzupełnij.'],
+  ['ice', 'Znajdźcie kogoś, kto…'], ['ice', 'Podział sali na połowy 🌗'], ['ice', 'Liczby 1–5 🥓🐓🪑⛺️🛶'], ['ice', 'Głuchy telefon'],
+  ['ice', 'Kamień, papier, nożyce: snakes fight 🐍'], ['ice', 'Bingo: znajdź kogoś, kto…'],
+  ['team', 'Pasta x marshmallow tower 🍝🗼'], ['team', 'Put the stick on the ground 🧹'], ['team', 'Supeł z rąk 🪢'], ['team', '5 rąk i 2 nogi na ziemi 🦵💪'],
+  ['team', 'Kartony i literki 📦'], ['team', 'Przejdźcie nad kablem 🔌'],
+  ['taniec', 'HSKT 🤯💪🦵🦶'], ['taniec', 'Feel It in My Bones 🔥🦴'], ['taniec', 'Church Clap 👏'], ['taniec', 'Good Feeling'], ['taniec', 'Put Your Hands in the Sky'], ['taniec', 'Praise'],
+];
+function newGame(o = {}){ return { id: rid(), title: '', cat: 'gra', energy: '', minutes: null, people: '', place: '', prep: '', rules: '', link: '', notes: '', createdAt: Date.now(), deletedAt: null, ...o }; }
+function seedGames(){
+  GAMES_SEED.forEach(([cat, title, rules = '', link = '', notes = '']) => { const g = newGame({ cat, title, rules, link, notes }); S.games[g.id] = g; persist('games', g.id); });
+  render(); toast('Wczytano ' + GAMES_SEED.length + ' pozycji. Bez opisu: ' + GAMES_SEED.filter(x => !x[2] && !x[3]).length + '.');
 }
 
 /* ---------- Logowanie i dostęp ---------- */
@@ -844,8 +1020,11 @@ function setMember(kind, id, em, on){
 async function importBackup(file){
   let data; try { data = JSON.parse(await file.text()); } catch (e) { toast('To nie jest plik kopii Pulpitu MC.'); return; }
   const ms = Object.values(data.meetings || {}), zs = Object.values(data.zjazdy || {});
-  if (!ms.length && !zs.length) { toast('Kopia jest pusta.'); return; }
+  const gs = Object.values(data.games || {}), as = Object.values(data.ann || {});
+  if (!ms.length && !zs.length && !gs.length && !as.length) { toast('Kopia jest pusta.'); return; }
   let n = 0;
+  gs.forEach(g => { if (g && g.id) { S.games[g.id] = g; persist('games', g.id); n++; } });
+  as.forEach(a => { if (a && a.id) { S.ann[a.id] = a; persist('ann', a.id); n++; } });
   zs.forEach(z => { if (!z || !z.id) return; z.members = uniq([...(z.members || []), ME.email]); S.zjazdy[z.id] = z; persist('zjazdy', z.id); n++; });
   ms.forEach(m => { if (!m || !m.id) return; const z = m.zjazdId && S.zjazdy[m.zjazdId]; m.members = uniq([...(m.members || []), ...((z && z.members) || []), ME.email]); S.meetings[m.id] = m; persist('meetings', m.id); n++; });
   S.sheet = null; render(); toast('Wczytano ' + n + ' ' + pl(n, 'element', 'elementy', 'elementów') + ' z kopii.');
@@ -948,8 +1127,21 @@ document.addEventListener('click', e => {
       S.confirm = null; delete S[kind][id]; persist(kind, id);
       if (kind === 'zjazdy') Object.values(S.meetings).filter(x => x.zjazdId === id).forEach(x => { delete S.meetings[x.id]; persist('meetings', x.id); });
       render(); toast('Usunięto na zawsze.'); break; }
-    case 'backup': save('pulpit-mc-kopia-' + todayStr() + '.json', JSON.stringify({ exportedAt: new Date().toISOString(), meetings: S.meetings, zjazdy: S.zjazdy }, null, 2), 'Kopia zapasowa zapisana.'); break;
+    case 'backup': save('pulpit-mc-kopia-' + todayStr() + '.json', JSON.stringify({ exportedAt: new Date().toISOString(), meetings: S.meetings, zjazdy: S.zjazdy, games: S.games, ann: S.ann }, null, 2), 'Kopia zapasowa zapisana.'); break;
 
+    case 'base-tab': S.baseTab = a.dataset.k; render(); break;
+    case 'gcat': S.gcat = a.dataset.k; render(); break;
+    case 'seed-games': seedGames(); break;
+    case 'new-game': { const g = newGame(); S.games[g.id] = g; persist('games', g.id); S.sheet = { type: 'game', gid: g.id }; render(); const f = $('#g-' + g.id + '-title'); if (f) f.focus(); break; }
+    case 'open-game': S.sheet = { type: 'game', gid: a.dataset.gid }; render(); break;
+    case 'del-game': { const g = S.games[S.sheet.gid]; g.deletedAt = Date.now(); persist('games', g.id); S.sheet = null; render(); toast('Gra przeniesiona do kosza.', 'Cofnij', () => { g.deletedAt = null; persist('games', g.id); render(); }); break; }
+    case 'insert-game': S.sheet = { type: 'game-pick', itemId: r.item.id }; render(); break;
+    case 'pick-game': insertGame(S.games[a.dataset.gid]); break;
+    case 'new-ann': { const n = { id: rid(), title: '', text: '', until: '', inits: [], createdAt: Date.now(), deletedAt: null }; S.ann[n.id] = n; persist('ann', n.id); S.sheet = { type: 'ann', aid: n.id }; render(); const f = $('#a-' + n.id + '-title'); if (f) f.focus(); break; }
+    case 'open-ann': S.sheet = { type: 'ann', aid: a.dataset.aid }; render(); break;
+    case 'del-ann': { const n = S.ann[S.sheet.aid]; n.deletedAt = Date.now(); persist('ann', n.id); S.sheet = null; render(); toast('Ogłoszenie przeniesione do kosza.', 'Cofnij', () => { n.deletedAt = null; persist('ann', n.id); render(); }); break; }
+    case 'insert-ann': S.sheet = { type: 'ann-pick', itemId: r.item.id }; render(); break;
+    case 'pick-ann': insertAnn(S.ann[a.dataset.aid]); break;
     case 'login': login(); break;
     case 'logout': logout(); break;
     case 'account': S.sheet = { type: 'account' }; render(); break;
@@ -986,6 +1178,9 @@ document.addEventListener('click', e => {
 
 document.addEventListener('input', e => {
   const t = e.target;
+  if (t.dataset.gq !== undefined) { S.gq = t.value; const box = $('#game-results'); if (box) box.innerHTML = gameResults(!!(S.sheet && S.sheet.type === 'game-pick')); return; }
+  if (t.dataset.gf && S.sheet && S.sheet.gid) { const g = S.games[S.sheet.gid], k = t.dataset.gf; if (!g) return; g[k] = k === 'minutes' ? (t.value === '' ? null : Math.max(0, Number(t.value))) : t.value; if (t.tagName === 'TEXTAREA') autosize(t); persist('games', g.id); return; }
+  if (t.dataset.af && S.sheet && S.sheet.aid) { const n = S.ann[S.sheet.aid]; if (!n) return; n[t.dataset.af] = t.value; if (t.tagName === 'TEXTAREA') autosize(t); persist('ann', n.id); return; }
   if (t.dataset.q !== undefined) { S.q = t.value; const box = $('#arch-results'); if (box) box.innerHTML = archiveResults(t.dataset.q); return; }
   if (t.tagName === 'TEXTAREA') autosize(t);
   const m = cur();
@@ -1005,6 +1200,7 @@ document.addEventListener('input', e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) { S.sheet = null; render(); } });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset.ainit && S.sheet && S.sheet.aid) { const n = S.ann[S.sheet.aid]; n.inits = t.checked ? uniq([...(n.inits || []), t.dataset.ainit]) : (n.inits || []).filter(k => k !== t.dataset.ainit); persist('ann', n.id); }
   if (t.dataset.member !== undefined && S.sheet && S.sheet.type === 'members') setMember(S.sheet.kind, S.sheet.oid, t.dataset.member, t.checked);
   if (t.id === 'import-file' && t.files && t.files[0]) { importBackup(t.files[0]); t.value = ''; }
 });
@@ -1049,7 +1245,7 @@ document.addEventListener('pointercancel', endDrag);
 
 /* ---------- Start i logowanie ---------- */
 function loadCache(){
-  try { const c = JSON.parse(lsGet(cacheKey()) || 'null'); if (c) { S.meetings = c.meetings || {}; S.zjazdy = c.zjazdy || {}; } } catch (e) {}
+  try { const c = JSON.parse(lsGet(cacheKey()) || 'null'); if (c) { S.meetings = c.meetings || {}; S.zjazdy = c.zjazdy || {}; S.games = c.games || {}; S.ann = c.ann || {}; } } catch (e) {}
 }
 function localMode(){
   S.mode = 'local'; loadCache(); S.loaded = true; setSync('local'); render();
@@ -1075,7 +1271,7 @@ async function init(){
 async function onUser(u){
   if (u && ME && ME.uid === u.uid) return;
   unsubs.splice(0).forEach(f => f());
-  S.meetings = {}; S.zjazdy = {}; S.people = {}; S.loaded = false; S.view = 'home'; S.openId = null; S.sheet = null;
+  S.meetings = {}; S.zjazdy = {}; S.games = {}; S.ann = {}; S.people = {}; S.loaded = false; S.view = 'home'; S.openId = null; S.sheet = null;
   if (!u) { ME = null; IS_ADMIN = false; S.mode = 'auth'; render(); return; }
   ME = { uid: u.uid, email: String(u.email || '').toLowerCase(), name: u.displayName || '' };
   loadCache();
@@ -1086,7 +1282,7 @@ async function onUser(u){
   IS_ADMIN = adm === true;
   if (!IS_ADMIN && allow === false) { S.mode = 'denied'; render(); return; }
   S.mode = 'db'; setSync('loading');
-  subscribe('meetings'); subscribe('zjazdy');
+  subscribe('meetings'); subscribe('zjazdy'); subscribe('games'); subscribe('ann');
   if (IS_ADMIN) subscribePeople();
   render();
 }

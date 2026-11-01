@@ -3,6 +3,7 @@ rules_version = '2';
 // Administrator: dokument admins/<adres-gmail> dodany ręcznie w konsoli.
 // Osoby z dostępem: dokumenty allow/<adres-gmail>, dodaje je administrator w aplikacji.
 // Spotkania i zjazdy widzi administrator oraz osoby z listy members danego dokumentu.
+// Gry i ogłoszenia (games, ann) są wspólne dla wszystkich osób z dostępem; usuwa na zawsze tylko administrator.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
@@ -26,6 +27,14 @@ service cloud.firestore {
       allow create: if isAdmin() || (allowed() && request.resource.data.members == [me()]);
       allow update: if isAdmin() || (allowed() && isMember(resource.data) && membersKept());
       allow delete: if isAdmin() || (allowed() && isMember(resource.data));
+    }
+    match /games/{id} {
+      allow read, create, update: if allowed();
+      allow delete: if isAdmin();
+    }
+    match /ann/{id} {
+      allow read, create, update: if allowed();
+      allow delete: if isAdmin();
     }
     match /meetings/{id} {
       allow read: if isAdmin() || (allowed() && isMember(resource.data));

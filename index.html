@@ -197,7 +197,23 @@ const STAGE_CSS = `
 .st{position:fixed;inset:0;z-index:100;background:#000;color:#fff;display:flex;flex-direction:column;font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);-webkit-user-select:none;user-select:none;touch-action:manipulation;color-scheme:dark}
 .st *{box-sizing:border-box}
 .st-top{display:flex;align-items:center;gap:8px;padding:8px max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px))}
-.st-count{font-size:18px;color:#a8aebb;font-variant-numeric:tabular-nums;min-width:52px}
+.st-count{display:inline-flex;align-items:center;gap:6px;padding:0 10px;font-size:17px;color:#e8eaf0;font-variant-numeric:tabular-nums}
+.st-burger{font-size:18px;color:#f5b14c}
+.st-prevline{display:block;max-width:100%;background:none;border:0;padding:0 0 10px;margin:0;color:#7d8494;font:inherit;font-size:calc(var(--fs) * .55);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.st-plan{position:absolute;inset:0;z-index:5;background:#000;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.st-plan[hidden]{display:none}
+.st-plan-h{display:flex;align-items:baseline;gap:12px;padding:16px 20px 8px;font-size:22px}
+.st-plan-late{font-size:16px;color:#a8aebb}.st-plan-late.over{color:#ff8a7a}
+.st-plan-list{list-style:none;margin:0;padding:0 12px 12px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.st-plan-blk{color:#f5b14c;font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:14px 8px 4px}
+.st-plan-it{width:100%;display:grid;grid-template-columns:54px 1fr auto;gap:10px;align-items:center;text-align:left;min-height:52px;padding:8px;border:1px solid transparent;border-radius:12px;background:none;color:#fff;font:inherit;font-size:19px;cursor:pointer}
+.st-plan-it.sub{padding-left:20px}
+.st-plan-it.div{color:#a8aebb;text-transform:uppercase;letter-spacing:.06em;font-size:15px}
+.st-plan-it.done{opacity:.45}
+.st-plan-it.now{border-color:#f5b14c;background:#1d1608}
+.st-plan-it small{display:block;color:#a8aebb;font-size:14px}
+.st-plan-t,.st-plan-m{color:#a8aebb;font-size:15px;font-variant-numeric:tabular-nums}
+.st-plan-back{margin:8px 12px 12px;min-height:64px;border-radius:14px;border:0;background:#f5b14c;color:#1a1206;font:inherit;font-size:20px;font-weight:700;cursor:pointer}
 .st-clock{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
 .st-wake{width:12px;height:12px;border-radius:50%;background:#555;border:0;padding:0;margin-left:4px}
 .st-wake.on{background:#3ecf8e}.st-wake.off{background:#f5b14c}
@@ -248,11 +264,11 @@ function mountStage(root, meeting, opts){
     if (b.hidden) return;
     var kids = (b.children || []).filter(function(c){ return !c.hidden; });
     var bMin = (b.minutes !== null && b.minutes !== '' && b.minutes != null) ? num(b.minutes) : kids.reduce(function(s, c){ return s + num(c.minutes); }, 0);
-    var plan = startMin != null ? toClock(startMin + cursor) : '';
+    var plan = startMin != null ? toClock(startMin + cursor) : '', at = cursor, sub = cursor;
     cursor += bMin;
-    if (b.kind === 'divider') { slides.push({t:'div', id:b.id, title:b.title, leader:b.leader, minutes:bMin, plan:plan}); return; }
-    if (b.say || b.note || !kids.length) slides.push({t:'item', id:b.id, eyebrow:'', title:b.title, leader:b.leader, minutes:bMin, say:b.say, note:b.note, plan:plan});
-    kids.forEach(function(c, i){ slides.push({t:'item', id:c.id, blockId:b.id, eyebrow:b.title, title:c.title, leader:c.leader || b.leader, minutes:num(c.minutes), say:c.say, note:c.note, plan: i === 0 && !(b.say || b.note) ? plan : ''}); });
+    if (b.kind === 'divider') { slides.push({t:'div', id:b.id, title:b.title, leader:b.leader, minutes:bMin, plan:plan, at:at}); return; }
+    if (b.say || b.note || !kids.length) slides.push({t:'item', id:b.id, eyebrow:'', title:b.title, leader:b.leader, minutes:bMin, say:b.say, note:b.note, plan:plan, at:at, block:b.title});
+    kids.forEach(function(c, i){ slides.push({t:'item', id:c.id, blockId:b.id, eyebrow:b.title, block:b.title, title:c.title, leader:c.leader || b.leader, minutes:num(c.minutes), say:c.say, note:c.note, plan: i === 0 && !(b.say || b.note) ? plan : '', at:sub}); sub += num(c.minutes); });
   });
   total = cursor;
   slides.unshift({t:'start'});
@@ -267,7 +283,7 @@ function mountStage(root, meeting, opts){
   root.innerHTML =
     '<div class="st" style="--fs:' + fs + 'px" role="application" aria-label="Widok sceniczny">' +
       '<div class="st-top">' +
-        '<span class="st-count" aria-live="polite"></span>' +
+        '<button class="st-btn st-count" type="button" aria-label="Pokaż cały plan"><span class="st-burger">☰</span><span class="st-count-n" aria-live="polite"></span></button>' +
         '<span class="st-clock"></span>' +
         '<button class="st-wake" type="button" aria-label="Stan blokady wygaszania ekranu"></button>' +
         '<span class="st-sp"></span>' +
@@ -277,6 +293,8 @@ function mountStage(root, meeting, opts){
       '</div>' +
       '<div class="st-prog"><i></i></div>' +
       '<div class="st-body"></div>' +
+      '<div class="st-plan" hidden role="dialog" aria-label="Cały plan"><div class="st-plan-h"><b>Cały plan</b><span class="st-plan-late"></span></div><ol class="st-plan-list"></ol>' +
+        '<button class="st-plan-back" type="button">Wróć do bieżącego punktu</button></div>' +
       '<div class="st-nav">' +
         '<button class="st-prev" type="button" aria-label="Poprzedni punkt">‹</button>' +
         '<button class="st-next" type="button"><small>Dalej</small><span></span></button>' +
@@ -284,7 +302,7 @@ function mountStage(root, meeting, opts){
     '</div>';
 
   var el = root.querySelector('.st'), body = el.querySelector('.st-body'), prev = el.querySelector('.st-prev'), next = el.querySelector('.st-next');
-  var countEl = el.querySelector('.st-count'), clockEl = el.querySelector('.st-clock'), prog = el.querySelector('.st-prog i'), wakeEl = el.querySelector('.st-wake');
+  var countEl = el.querySelector('.st-count-n'), planBtn = el.querySelector('.st-count'), planEl = el.querySelector('.st-plan'), planList = el.querySelector('.st-plan-list'), clockEl = el.querySelector('.st-clock'), prog = el.querySelector('.st-prog i'), wakeEl = el.querySelector('.st-wake');
 
   function fmtDur(ms){ var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
   function titleOf(s){ if (!s) return ''; if (s.t === 'start') return 'Start'; if (s.t === 'end') return 'Koniec planu'; return s.title || 'Bez nazwy'; }
@@ -305,7 +323,8 @@ function mountStage(root, meeting, opts){
     if (s.plan) chips += '<span class="st-chip">plan ' + esc(s.plan) + '</span>';
     chips += '<span class="st-chip st-elapsed">0:00</span>';
     if (s.t === 'div') return '<div class="st-center st-div"><h1 class="st-title">' + esc(s.title) + '</h1><div class="st-chips">' + chips + '</div></div>';
-    return (s.eyebrow ? '<div class="st-eyebrow">' + esc(s.eyebrow) + '</div>' : '') +
+    var pv = slides[idx - 1];
+    return (pv && pv.t !== 'start' ? '<button type="button" class="st-prevline" aria-label="Wróć do poprzedniego punktu">było: ' + esc(titleOf(pv)) + '</button>' : '') + (s.eyebrow ? '<div class="st-eyebrow">' + esc(s.eyebrow) + '</div>' : '') +
       '<h1 class="st-title">' + esc(s.title || 'Bez nazwy') + '</h1>' +
       '<div class="st-chips">' + chips + '</div>' +
       (s.say ? '<div class="st-say">' + esc(s.say) + '</div>' : (s.note ? '' : '<div class="st-empty">Brak notatki do tego punktu.</div>')) +
@@ -316,7 +335,8 @@ function mountStage(root, meeting, opts){
     var s = slides[idx];
     body.innerHTML = slideHtml(s);
     body.scrollTop = 0;
-    countEl.textContent = (s.t === 'start' || s.t === 'end') ? '' : idx + '/' + (slides.length - 2);
+    countEl.textContent = (s.t === 'start' || s.t === 'end') ? 'Plan' : idx + '/' + (slides.length - 2);
+    var pl = body.querySelector('.st-prevline'); if (pl) pl.addEventListener('click', function(){ go(-1); });
     prog.style.width = (idx / (slides.length - 1) * 100) + '%';
     prev.disabled = idx === 0;
     next.disabled = idx === slides.length - 1;
@@ -324,6 +344,36 @@ function mountStage(root, meeting, opts){
     slideStart = Date.now();
     update();
   }
+  function late(){
+    // Ile minut po (+) lub przed (−) planem jest bieżący punkt, gdy znamy godzinę startu.
+    var s = slides[idx]; if (startMin == null || !s || s.at == null) return null;
+    var now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    var d = Math.round(nowMin - (startMin + s.at) - (Date.now() - slideStart) / 60000);
+    return !total || Math.abs(d) > 120 ? null : d;
+  }
+  function openPlan(){
+    var h = '', lastBlock = null, lastClock = '';
+    slides.forEach(function(s, i){
+      if (s.t === 'start' || s.t === 'end') return;
+      if (s.blockId && s.blockId !== lastBlock) h += '<li class="st-plan-blk">' + esc(s.block || '') + '</li>';
+      lastBlock = s.blockId || (s.t === 'div' ? null : s.id);
+      var clock = startMin != null && s.at != null && total ? toClock(startMin + s.at) : '';
+      if (clock === lastClock) clock = ''; else lastClock = clock;
+      h += '<li><button type="button" data-i="' + i + '" class="st-plan-it' + (s.blockId ? ' sub' : '') + (s.t === 'div' ? ' div' : '') + (i === idx ? ' now' : i < idx ? ' done' : '') + '">' +
+        '<span class="st-plan-t">' + esc(clock) + '</span><span class="st-plan-n">' + esc(titleOf(s)) + (s.leader ? '<small>' + esc(s.leader) + '</small>' : '') + '</span>' +
+        '<span class="st-plan-m">' + (s.minutes ? s.minutes + ' min' : '') + '</span></button></li>';
+    });
+    planList.innerHTML = h;
+    var d = late(), lt = el.querySelector('.st-plan-late');
+    lt.textContent = d == null ? '' : d > 1 ? 'spóźnienie ' + d + ' min' : d < -1 ? 'przed czasem ' + (-d) + ' min' : 'zgodnie z planem';
+    lt.className = 'st-plan-late' + (d != null && d > 1 ? ' over' : '');
+    planEl.hidden = false;
+    var cur = planList.querySelector('.now'); if (cur) cur.scrollIntoView({ block: 'center' });
+  }
+  function closePlan(){ planEl.hidden = true; }
+  planBtn.addEventListener('click', function(){ planEl.hidden ? openPlan() : closePlan(); });
+  el.querySelector('.st-plan-back').addEventListener('click', closePlan);
+  planList.addEventListener('click', function(e){ var b = e.target.closest('[data-i]'); if (!b) return; var n = Number(b.dataset.i); closePlan(); if (n !== idx) { record(); idx = n; show(); if (opts.onIndex) opts.onIndex(idx); } });
   var times = {};
   function record(){ var s = slides[idx]; if (s && s.id) { var sec = Math.round((Date.now() - slideStart) / 1000); if (sec >= 3) times[s.id] = (times[s.id] || 0) + sec; } }
   function go(d){ var n = idx + d; if (n < 0 || n >= slides.length) return; record(); idx = n; show(); if (opts.onIndex) opts.onIndex(idx); }
@@ -348,6 +398,8 @@ function mountStage(root, meeting, opts){
   }
   function onVis(){ if (document.visibilityState === 'visible' && !lock) reqLock(true); }
   function onKey(e){
+    if (!planEl.hidden) { if (e.key === 'Escape' || e.key === 'p') { e.preventDefault(); closePlan(); } return; }
+    if (e.key === 'p') { openPlan(); return; }
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(1); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(-1); }
     else if (e.key === 'Escape' && !opts.standalone) exit();

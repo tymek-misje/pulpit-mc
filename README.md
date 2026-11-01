@@ -15,4 +15,4 @@ Dostęp:
 - spotkania i zjazdy widzi administrator i osoby z pola `members` (przycisk „Kto widzi”).
 
 W repozytorium nie ma żadnych danych spotkań ani danych osobowych, tylko kod.
-Do testów bez bazy: `index.html?lokalnie` (zapis tylko w przeglądarce).
+Do testów bez bazy na localhost: `index.html?lokalnie` (zapis tylko w przeglądarce).

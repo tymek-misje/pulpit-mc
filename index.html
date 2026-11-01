@@ -170,6 +170,12 @@ fieldset.fld{border:0;padding:0;margin:0}
 .seg-b[aria-pressed="true"]{background:var(--surface);color:var(--ink)}
 .game-card{grid-template-columns:1fr}
 .game-tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag.warn{background:var(--danger);color:var(--surface)}
+.chip.sm{min-height:36px;font-size:13px}
+.chip.roll{border-color:var(--accent);color:var(--accent)}
+.rolled{display:flex;flex-direction:column;gap:6px;padding:var(--s2);border:2px solid var(--accent);border-radius:calc(var(--r) + 4px)}
+.rolled-h{display:flex;align-items:center;gap:var(--s2);font-weight:700;color:var(--accent)}
+.rolled-h span{flex:1}
 .hint{margin:0;color:var(--ink-2);font-size:14px}
 .tab{padding:0 4px;line-height:1.15}
 .sheet .sp{flex:1}
@@ -850,15 +856,25 @@ function gameLastUsed(gid){
   Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date) return; (m.items || []).forEach(function w(it){ if (it.gameId === gid && (!best || m.date > best.date)) best = m; (it.children || []).forEach(w); }); });
   return best;
 }
+const dayNo = d => { const [y, m, dd] = d.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, dd) / 864e5); };
+function gameRecent(gid, ref, exceptMid){
+  // Najbliższe użycie gry w innym spotkaniu w promieniu 21 dni od daty odniesienia.
+  let best = null; const r = dayNo(ref || todayStr());
+  Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date || m.id === exceptMid) return; const d = Math.abs(dayNo(m.date) - r); if (d > 21) return;
+    (m.items || []).forEach(function w(it){ if (it.gameId === gid && (!best || d < best.days)) best = { m, days: d }; (it.children || []).forEach(w); }); });
+  return best;
+}
+const recentLabel = x => x.days === 0 ? 'w tym samym dniu' : x.days < 7 ? x.days + ' ' + pl(x.days, 'dzień', 'dni', 'dni') + ' od tego' : Math.round(x.days / 7) + ' ' + pl(Math.round(x.days / 7), 'tydzień', 'tygodnie', 'tygodni') + ' od tego';
 function gameMeta(g){
   return [GAME_CATS[g.cat] || '', g.energy ? ENERGY[g.energy] : '', hasMin(g.minutes) ? g.minutes + ' min' : '', g.people || ''].filter(Boolean);
 }
 function gameCardHtml(g, pick){
   const last = gameLastUsed(g.id), q = norm((S.gq || '').trim());
+  const m = pick ? cur() : null, rec = gameRecent(g.id, m ? m.date : todayStr(), m ? m.id : null);
   const snip = q && !norm(g.title).includes(q) ? [g.rules, g.prep, g.place, g.notes].map(f => f && snippet(f, q)).find(Boolean) : '';
   return `<button type="button" class="card game-card" data-act="${pick ? 'pick-game' : 'open-game'}" data-gid="${g.id}">
     <span class="card-title">${esc(g.title || 'Bez nazwy')}</span>
-    <span class="game-tags">${gameMeta(g).map(t => `<span class="tag">${esc(t)}</span>`).join('')}${gameHasDesc(g) ? '' : '<span class="tag gap">brak opisu</span>'}${g.link ? '<span class="tag">link</span>' : ''}</span>
+    <span class="game-tags">${gameMeta(g).map(t => `<span class="tag">${esc(t)}</span>`).join('')}${gameHasDesc(g) ? '' : '<span class="tag gap">brak opisu</span>'}${g.link ? '<span class="tag">link</span>' : ''}${rec ? `<span class="tag warn">była ${shortDate(rec.m.date)}</span>` : ''}</span>
     ${last ? `<span class="card-sub">ostatnio: ${esc(INIT[last.initiative].name)} ${shortDate(last.date)}</span>` : ''}
     ${snip ? `<span class="card-snip">${snip}</span>` : ''}
   </button>`;
@@ -867,18 +883,31 @@ function filteredGames(){
   const q = norm((S.gq || '').trim()), cat = S.gcat || '';
   return Object.values(S.games).filter(g => !g.deletedAt)
     .filter(g => !cat || (cat === 'brak' ? !gameHasDesc(g) : g.cat === cat))
+    .filter(g => !S.gen || g.energy === S.gen)
     .filter(g => !q || [g.title, g.rules, g.prep, g.place, g.notes, g.people, GAME_CATS[g.cat]].some(f => f && norm(f).includes(q)))
     .sort((a, b) => (a.title || '').localeCompare(b.title || '', 'pl'));
 }
+function rollGame(){
+  const gs = filteredGames(); if (!gs.length) { toast('Brak gier pasujących do filtrów.'); return; }
+  const m = S.sheet && S.sheet.type === 'game-pick' ? cur() : null;
+  const others = gs.filter(g => g.id !== S.rolled);
+  const fresh = others.filter(g => !gameRecent(g.id, m ? m.date : todayStr(), m ? m.id : null));
+  const pool = fresh.length ? fresh : others.length ? others : gs;
+  S.rolled = pool[Math.floor(Math.random() * pool.length)].id; render();
+}
 function gameResults(pick){
   const gs = filteredGames();
-  return gs.length ? gs.map(g => gameCardHtml(g, pick)).join('') : `<p class="empty">${Object.keys(S.games).length ? 'Nic nie znaleziono.' : 'Baza gier jest pusta.'}</p>`;
+  const rolled = S.rolled && S.games[S.rolled] && !S.games[S.rolled].deletedAt ? S.games[S.rolled] : null;
+  const top = rolled ? `<div class="rolled"><div class="rolled-h"><span>🎲 Wylosowano</span><button type="button" class="btn sm" data-act="roll">Losuj jeszcze raz</button><button type="button" class="btn sm ghost" data-act="unroll" aria-label="Zamknij losowanie">✕</button></div>${gameCardHtml(rolled, pick)}</div>` : '';
+  return top + (gs.length ? gs.map(g => gameCardHtml(g, pick)).join('') : `<p class="empty">${Object.keys(S.games).length ? 'Nic nie znaleziono.' : 'Baza gier jest pusta.'}</p>`);
 }
 function gameFilterHtml(){
   const all = Object.values(S.games).filter(g => !g.deletedAt);
   const chips = [['', 'Wszystkie', all.length], ...Object.entries(GAME_CATS).map(([k, v]) => [k, v, all.filter(g => g.cat === k).length]), ['brak', 'Brak opisu', all.filter(g => !gameHasDesc(g)).length]];
   return `<input type="search" class="search" id="gq" data-gq value="${esc(S.gq || '')}" placeholder="Szukaj gry po nazwie i opisie" aria-label="Szukaj gry">
-    <div class="chips" role="group" aria-label="Kategoria">${chips.filter(c => c[2] || c[0] === '').map(([k, v, n]) => `<button type="button" class="chip" data-act="gcat" data-k="${k}" aria-pressed="${(S.gcat || '') === k}">${esc(v)} <span>${n}</span></button>`).join('')}</div>`;
+    <div class="chips" role="group" aria-label="Kategoria">${chips.filter(c => c[2] || c[0] === '').map(([k, v, n]) => `<button type="button" class="chip" data-act="gcat" data-k="${k}" aria-pressed="${(S.gcat || '') === k}">${esc(v)} <span>${n}</span></button>`).join('')}</div>
+    <div class="chips" role="group" aria-label="Energia">${Object.entries(ENERGY).filter(([k]) => S.gen === k || all.some(g => g.energy === k)).map(([k, v]) => `<button type="button" class="chip sm" data-act="gen" data-k="${k}" aria-pressed="${S.gen === k}">${esc(v)} <span>${all.filter(g => g.energy === k).length}</span></button>`).join('')}
+      <button type="button" class="chip roll" data-act="roll">🎲 Losuj</button></div>`;
 }
 function baseHtml(){
   const seg = `<div class="seg" role="group" aria-label="Baza">${[['gry', 'Gry'], ['ogl', 'Ogłoszenia']].map(([k, v]) => `<button type="button" class="seg-b" data-act="base-tab" data-k="${k}" aria-pressed="${(S.baseTab || 'gry') === k}">${v}</button>`).join('')}</div>`;
@@ -923,7 +952,9 @@ function insertGame(g){
     if (generic) target = generic; else { target = P(''); r.item.children.push(target); }
   }
   fill(target); S.expanded.add(target.id);
-  persist('meetings', m.id); S.sheet = null; render(); toast('Wstawiono „' + g.title + '”.', 'Cofnij', doUndo);
+  const rec = gameRecent(g.id, m.date, m.id);
+  persist('meetings', m.id); S.sheet = null; S.rolled = null; render();
+  toast('Wstawiono „' + g.title + '”.' + (rec ? ' Uwaga: była ' + shortDate(rec.m.date) + ' (' + INIT[rec.m.initiative].name + ').' : ''), 'Cofnij', doUndo);
 }
 
 /* Ogłoszenia: krótki tekst z datą ważności, do wstawienia w plan. */
@@ -1131,11 +1162,14 @@ document.addEventListener('click', e => {
 
     case 'base-tab': S.baseTab = a.dataset.k; render(); break;
     case 'gcat': S.gcat = a.dataset.k; render(); break;
+    case 'gen': S.gen = S.gen === a.dataset.k ? '' : a.dataset.k; render(); break;
+    case 'roll': rollGame(); break;
+    case 'unroll': S.rolled = null; render(); break;
     case 'seed-games': seedGames(); break;
     case 'new-game': { const g = newGame(); S.games[g.id] = g; persist('games', g.id); S.sheet = { type: 'game', gid: g.id }; render(); const f = $('#g-' + g.id + '-title'); if (f) f.focus(); break; }
     case 'open-game': S.sheet = { type: 'game', gid: a.dataset.gid }; render(); break;
     case 'del-game': { const g = S.games[S.sheet.gid]; g.deletedAt = Date.now(); persist('games', g.id); S.sheet = null; render(); toast('Gra przeniesiona do kosza.', 'Cofnij', () => { g.deletedAt = null; persist('games', g.id); render(); }); break; }
-    case 'insert-game': S.sheet = { type: 'game-pick', itemId: r.item.id }; render(); break;
+    case 'insert-game': S.sheet = { type: 'game-pick', itemId: r.item.id }; S.rolled = null; S.gcat = ''; S.gen = ''; S.gq = ''; render(); break;
     case 'pick-game': insertGame(S.games[a.dataset.gid]); break;
     case 'new-ann': { const n = { id: rid(), title: '', text: '', until: '', inits: [], createdAt: Date.now(), deletedAt: null }; S.ann[n.id] = n; persist('ann', n.id); S.sheet = { type: 'ann', aid: n.id }; render(); const f = $('#a-' + n.id + '-title'); if (f) f.focus(); break; }
     case 'open-ann': S.sheet = { type: 'ann', aid: a.dataset.aid }; render(); break;
@@ -1252,6 +1286,7 @@ function localMode(){
 }
 async function init(){
   render();
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has('lokalnie')) { localMode(); return; }
   if (!FIREBASE_CONFIG || !FIREBASE_CONFIG.apiKey) {
     if (new URLSearchParams(location.search).has('lokalnie')) { localMode(); return; }
     S.mode = 'setup'; $('#app').innerHTML = `<main class="auth"><div class="auth-card"><h1 class="brand">Pulpit MC</h1><p>Aplikacja jest w przygotowaniu. Logowanie ruszy po podłączeniu bazy.</p><a class="btn big" href="scena/">Otwórz stronę sceny</a></div></main>`; return;

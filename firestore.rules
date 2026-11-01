@@ -1,0 +1,40 @@
+rules_version = '2';
+// Reguły bazy Pulpitu MC. Wklej je w konsoli Firebase: Firestore Database → Reguły → Opublikuj.
+// Administrator: dokument admins/<adres-gmail> dodany ręcznie w konsoli.
+// Osoby z dostępem: dokumenty allow/<adres-gmail>, dodaje je administrator w aplikacji.
+// Spotkania i zjazdy widzi administrator oraz osoby z listy members danego dokumentu.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function me() { return request.auth.token.email.lower(); }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(me())); }
+    function allowed() { return signedIn() && (exists(/databases/$(database)/documents/allow/$(me())) || isAdmin()); }
+    function isMember(data) { return me() in data.members; }
+    function membersKept() { return request.resource.data.members == resource.data.members; }
+    function zjazdMembers(zid) { return get(/databases/$(database)/documents/zjazdy/$(zid)).data.members; }
+
+    match /admins/{email} {
+      allow read: if signedIn() && me() == email;
+      allow write: if false;
+    }
+    match /allow/{email} {
+      allow read: if isAdmin() || (signedIn() && me() == email);
+      allow write: if isAdmin();
+    }
+    match /zjazdy/{id} {
+      allow read: if isAdmin() || (allowed() && isMember(resource.data));
+      allow create: if isAdmin() || (allowed() && request.resource.data.members == [me()]);
+      allow update: if isAdmin() || (allowed() && isMember(resource.data) && membersKept());
+      allow delete: if isAdmin() || (allowed() && isMember(resource.data));
+    }
+    match /meetings/{id} {
+      allow read: if isAdmin() || (allowed() && isMember(resource.data));
+      allow create: if isAdmin() || (allowed() && (
+        request.resource.data.members == [me()] ||
+        (request.resource.data.zjazdId is string && isMember(request.resource.data)
+          && request.resource.data.members == zjazdMembers(request.resource.data.zjazdId))));
+      allow update: if isAdmin() || (allowed() && isMember(resource.data) && membersKept());
+      allow delete: if isAdmin() || (allowed() && isMember(resource.data));
+    }
+  }
+}

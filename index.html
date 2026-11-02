@@ -64,7 +64,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .sync.s-saving::before{background:var(--accent)}
 .sync.s-offline::before,.sync.s-error::before,.sync.s-local::before{background:var(--danger)}
 
-.tabs{display:grid;grid-template-columns:1fr 1.25fr .8fr .8fr;gap:4px;padding:4px;background:var(--surface-2);border-radius:var(--r)}
+.tabs{display:grid;grid-template-columns:1fr 1.3fr .8fr .8fr .55fr;gap:4px;padding:4px;background:var(--surface-2);border-radius:var(--r)}
 .tab{min-height:48px;border:0;border-radius:9px;background:transparent;font-weight:700;font-size:15px;cursor:pointer;color:var(--ink-2)}
 .tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 
@@ -193,6 +193,15 @@ details.help p{color:var(--ink);margin:6px 0 0}
 .people>li{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s3);border:1px solid var(--line);border-radius:var(--r)}
 .people-h{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);flex-wrap:wrap}
 .people small{display:block;color:var(--ink-2)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tab[data-k="sandbox"]{font-size:20px}
+.sandbox-intro{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s4);border:1px dashed var(--accent);border-radius:var(--r);background:var(--accent-soft)}
+.sandbox-intro h2{font-family:var(--font-display);margin:0;font-size:22px}
+.sandbox-intro p{margin:0}
+.tasks,.map{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:var(--s2)}
+.map{list-style:none;padding:0}
+.tasks li span,.map li span{display:block;color:var(--ink-2);font-size:15px}
+.map li{display:flex;gap:var(--s2);align-items:baseline}.map li b{flex:0 0 auto}.map li span{display:inline}
 .req-note{margin:0;color:var(--ink);font-style:italic;overflow-wrap:anywhere;white-space:pre-wrap}
 .avatar{position:relative}
 .avatar.has-badge::after{content:"";position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:var(--danger);border:2px solid var(--bg)}
@@ -466,7 +475,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rid = () => Math.random().toString(36).slice(2, 10);
 const clone = o => JSON.parse(JSON.stringify(o));
-const INIT = { beloved:{name:'Beloved'}, source:{name:'Source Youth'}, sum:{name:'SUM'} };
+const INIT = { beloved:{name:'Beloved'}, source:{name:'Source Youth'}, sum:{name:'SUM'}, sandbox:{name:'Piaskownica'} };
+const REAL = ['beloved', 'source', 'sum'];
 const DAYS = ['nd','pn','wt','śr','cz','pt','sb'];
 const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
@@ -552,7 +562,7 @@ window.addEventListener('online', syncFromMeta);
 window.addEventListener('offline', syncFromMeta);
 
 const SRC = {};
-function myInits(){ return IS_ADMIN ? Object.keys(INIT) : ((S.access && S.access.inits) || []).filter(k => INIT[k]); }
+function myInits(){ return IS_ADMIN ? REAL.slice() : ((S.access && S.access.inits) || []).filter(k => REAL.includes(k)); }
 function canAnn(){ return IS_ADMIN || S.mode === 'local' || !!(S.access && S.access.ann); }
 function subscribe(kind){
   const col = F.collection(FDB, kind);
@@ -668,9 +678,9 @@ document.addEventListener('focusout', () => setTimeout(() => { const a = documen
 function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
 
 function homeHtml(){
-  const tabs = `<nav class="tabs" role="tablist" aria-label="Inicjatywy">${['beloved','source','sum','base'].map(k => `<button type="button" role="tab" aria-selected="${S.tab === k}" class="tab" data-act="tab" data-k="${k}">${k === 'base' ? 'Baza' : INIT[k].name}</button>`).join('')}</nav>`;
+  const tabs = `<nav class="tabs" role="tablist" aria-label="Inicjatywy">${['beloved','source','sum','base','sandbox'].map(k => `<button type="button" role="tab" aria-selected="${S.tab === k}" class="tab" data-act="tab" data-k="${k}">${k === 'base' ? 'Baza' : k === 'sandbox' ? '🧪<span class="sr"> Piaskownica</span>' : INIT[k].name}</button>`).join('')}</nav>`;
   return `<header class="bar"><h1 class="brand">Pulpit MC</h1><span class="sp"></span>${syncHtml()}<button type="button" class="avatar help-b" data-act="help" aria-label="Instrukcja">?</button>${ME ? `<button type="button" class="avatar${Object.keys(S.requests || {}).length ? ' has-badge' : ''}" data-act="account" aria-label="Konto: ${esc(ME.email)}">${esc((ME.name || ME.email).trim().charAt(0).toUpperCase())}</button>` : ''}</header>
-  <main class="wrap">${tabs}${S.tab === 'base' ? baseHtml() : S.tab === 'sum' ? sumHtml() : listHtml(INIT[S.tab] ? S.tab : 'beloved')}${homeTrashHtml()}
+  <main class="wrap">${tabs}${S.tab === 'base' ? baseHtml() : S.tab === 'sandbox' ? sandboxHtml() : S.tab === 'sum' ? sumHtml() : listHtml(INIT[S.tab] ? S.tab : 'beloved')}${homeTrashHtml()}
     ${IS_ADMIN || S.mode === 'local' ? '<div class="foot-tools"><button type="button" class="btn ghost sm" data-act="backup">Kopia zapasowa wszystkich danych (JSON)</button></div>' : ''}
   </main>`;
 }
@@ -694,6 +704,51 @@ function listHtml(init){
     <h2 class="sec">Nadchodzące</h2>
     ${up.length ? `<div class="cards">${up.map(cardHtml).join('')}</div>` : `<p class="empty">${loading ? 'Wczytuję spotkania…' : 'Brak zaplanowanych spotkań. Utwórz pierwsze z szablonu MC i uzupełnij notatki.'}</p>`}
     ${ms.length ? archiveHtml(init) : ''}`;
+}
+/* ---------- Piaskownica: prywatne ćwiczenia i samouczek ---------- */
+function isMineSandbox(m){ return m.initiative === 'sandbox' && (!ME || (m.members || []).includes(ME.email)); }
+function sandboxHtml(){
+  const ms = Object.values(S.meetings).filter(m => isMineSandbox(m) && !m.deletedAt).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const step = (t, d) => `<li><b>${t}</b><span>${d}</span></li>`;
+  return `<section class="sandbox-intro"><h2>🧪 Piaskownica</h2>
+      <p>Miejsce do nauki i zabawy. Ćwiczenia widzisz tylko Ty, nie trafiają do archiwum ani do statystyk gier. Możesz tu wszystko psuć.</p>
+      <div class="row" style="justify-content:flex-start"><button type="button" class="btn primary" data-act="sandbox-demo">Utwórz przykładowe spotkanie</button><button type="button" class="btn" data-act="new" data-k="sandbox">+ Własne ćwiczenie</button></div></section>
+    <h2 class="sec">Twoje ćwiczenia</h2>
+    ${ms.length ? `<div class="cards">${ms.map(cardHtml).join('')}</div>
+      <div class="row"><button type="button" class="btn sm danger-ghost" data-act="sandbox-clear">${S.confirm === 'sandbox' ? 'Na pewno? Do kosza' : 'Wyczyść piaskownicę'}</button></div>` : '<p class="empty">Jeszcze nic tu nie ma. Zacznij od przykładowego spotkania.</p>'}
+    <h2 class="sec">Spróbuj po kolei</h2>
+    <ol class="tasks">
+      ${step('Otwórz przykładowe spotkanie', 'Dotknij punktu, żeby zobaczyć pola: kto prowadzi, czas, „Do powiedzenia” i „Uwaga dla MC”.')}
+      ${step('Zmień kolejność', 'Przeciągnij punkt za ⠿ albo użyj „↑ Wyżej” i „↓ Niżej”.')}
+      ${step('Usuń i cofnij', 'Usuń punkt, a potem dotknij „Cofnij” na górze albo w dymku na dole.')}
+      ${step('Ukryj punkt', '„Ukryj” zostawia punkt w planie, ale nie pokazuje go na scenie.')}
+      ${step('Wstaw grę', 'Otwórz punkt „Gra” i dotknij „🎳 Wstaw grę”. Spróbuj „🎲 Losuj”.')}
+      ${step('Sprawdź luki', '„Pokaż luki” wskaże punkty bez prowadzącego albo bez notatki.')}
+      ${step('Poprowadź ze sceny', 'Dotknij „Scena”. Przejdź „Dalej”, otwórz ☰ z całym planem, zmień tekst A+ i wyjdź, przytrzymując „Wyjdź”.')}
+      ${step('Wyślij link sceny', 'Na dole spotkania „Wyślij link sceny”. Otwórz go w innej przeglądarce.')}
+    </ol>
+    <h2 class="sec">Gdzie co jest?</h2>
+    <ul class="map">
+      <li><b>Beloved, Source Youth, SUM</b><span>prawdziwe spotkania. Na SUM najpierw zjazd, w nim sesje.</span></li>
+      <li><b>Baza</b><span>gry${canAnn() ? ' i ogłoszenia' : ''}, wspólne dla zespołu.</span></li>
+      <li><b>🧪</b><span>ta piaskownica.</span></li>
+      <li><b>?</b><span>instrukcja w pigułce.</span></li>
+      <li><b>Kółko z literą</b><span>konto i wylogowanie${IS_ADMIN ? ', osoby z dostępem, prośby i kopia zapasowa' : ''}.</span></li>
+      <li><b>Kosz</b><span>na dole strony głównej: usunięte spotkania leżą tam 30 dni.</span></li>
+    </ul>`;
+}
+function sandboxDemo(){
+  const items = [
+    B('🏁 Rozpoczęcie', [P('Powitanie', { leader: 'MC', minutes: 2, say: 'Hej, witajcie na spotkaniu! Super, że jesteście.', note: 'Uśmiech, spokojnie, mów wolniej niż myślisz.' }), P('Interakcja', { minutes: 3, say: 'Przybijcie piątkę z osobą obok i powiedzcie, co dziś było najlepsze.' }), P('Ogłoszenia wstępne', { minutes: 2 })]),
+    B('🎳 Gra', [P('Zaproszenie do czasu gier', { say: 'Nie każdy musi grać, ale zachęcamy!' }), P('Gra', { minutes: 10, note: 'Wstaw tu grę z bazy przyciskiem „🎳 Wstaw grę”.' })]),
+    B('📖 Zapowiedź Słowa', [P('Uhonorowanie mówcy', { minutes: 2, say: 'Zaprośmy naszego mówcę, mocne brawa!' }), P('Modlitwa', { minutes: 1 })]),
+    D('Słowo / grupki', { minutes: 40 }),
+    B('📣 Ogłoszenia końcowe', [P('O następnym spotkaniu', { minutes: 2, say: 'Widzimy się za tydzień o tej samej porze.' }), P('Punkt do ukrycia', { hidden: true, note: 'Ten punkt jest ukryty, więc nie pojawi się na scenie.' })], { leader: 'MC' }),
+  ];
+  const m = { id: rid(), initiative: 'sandbox', zjazdId: null, title: 'Przykładowe spotkanie', date: todayStr(), start: '19:00', mc: '', items,
+    trash: [], versions: [], members: newMembers(null), createdAt: Date.now(), deletedAt: null };
+  S.meetings[m.id] = m; persist('meetings', m.id); openMeeting(m.id);
+  toast('Utworzono przykładowe spotkanie. Możesz tu wszystko zmieniać.');
 }
 function sessionsOf(zid){
   return Object.values(S.meetings).filter(m => m.initiative === 'sum' && m.zjazdId === zid && !m.deletedAt)
@@ -787,7 +842,8 @@ function editorHtml(){
   <main class="wrap">
     <section class="meta-card">
       <div class="eyebrow"><span>${INIT[m.initiative].name}${zj ? ' · ' + esc(zj.title) : ''}</span>${syncHtml()}</div>
-      ${m.date && m.date < todayStr() ? `<div class="banner"><span>Spotkanie z archiwum (${fmtDate(m.date)}).</span><button type="button" class="btn sm" data-act="reuse" data-mid="${m.id}">Użyj jako bazy nowego</button></div>` : ''}
+      ${m.initiative === 'sandbox' ? '<div class="banner"><span>🧪 Ćwiczenie w piaskownicy. Widzisz je tylko Ty, możesz tu wszystko psuć.</span></div>' : ''}
+      ${m.date && m.date < todayStr() && m.initiative !== 'sandbox' ? `<div class="banner"><span>Spotkanie z archiwum (${fmtDate(m.date)}).</span><button type="button" class="btn sm" data-act="reuse" data-mid="${m.id}">Użyj jako bazy nowego</button></div>` : ''}
       <input class="title-input" id="m-title" data-mf="title" value="${esc(m.title)}" aria-label="Nazwa spotkania" placeholder="Nazwa spotkania">
       <div class="meta-row">
         <label class="fld"><span>Data</span><input type="date" id="m-date" data-mf="date" value="${esc(m.date)}"></label>
@@ -805,7 +861,7 @@ function editorHtml(){
       <button type="button" class="btn" data-act="download-txt">Pobierz jako tekst</button>
       <button type="button" class="btn" data-act="versions">Historia wersji (${(m.versions || []).length})</button>
       <button type="button" class="btn" data-act="trash-items">Kosz elementów (${(m.trash || []).length})</button>
-      ${IS_ADMIN ? `<button type="button" class="btn" data-act="members" data-kind="meetings" data-oid="${m.id}">Kto widzi (${(m.members || []).length})</button>` : ''}
+      ${IS_ADMIN && m.initiative !== 'sandbox' ? `<button type="button" class="btn" data-act="members" data-kind="meetings" data-oid="${m.id}">Kto widzi (${(m.members || []).length})</button>` : ''}
       <button type="button" class="btn" data-act="duplicate">Duplikuj spotkanie</button>
       ${m.actual ? `<button type="button" class="btn" data-act="clear-times">Wyczyść czasy ze sceny</button>` : ''}
       <button type="button" class="btn danger-ghost" data-act="del-meeting">Przenieś spotkanie do kosza</button>
@@ -868,7 +924,8 @@ function sheetHtml(){
   let inner = '';
   if (s.type === 'new') {
     const sum = s.init === 'sum', z = sum && S.zjazdy[s.zid];
-    const pool = Object.values(S.meetings).filter(m => !m.deletedAt && (sum ? m.initiative === 'sum' : m.initiative !== 'sum')).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const sb = s.init === 'sandbox';
+    const pool = Object.values(S.meetings).filter(m => !m.deletedAt && (sb ? isMineSandbox(m) || m.initiative !== 'sandbox' : sum ? m.initiative === 'sum' : m.initiative !== 'sum' && m.initiative !== 'sandbox')).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const nextNo = sum ? sessionsOf(s.zid).length + 1 : 0;
     inner = `<h2>${sum ? 'Nowa sesja · ' + esc(z ? z.title : 'SUM') : 'Nowe spotkanie · ' + INIT[s.init].name}</h2>
       <label class="fld"><span>Nazwa</span><input id="n-title" value="${sum ? 'Sesja ' + nextNo : ''}" placeholder="${sum ? 'Sesja ' + nextNo : INIT[s.init].name + ' ' + shortDate(todayStr())}"></label>
@@ -877,6 +934,7 @@ function sheetHtml(){
       ${sum ? `<label class="fld"><span>MC sesji</span><input id="n-mc" list="dl-names-s" placeholder="imiona po przecinku" autocomplete="off"></label><datalist id="dl-names-s">${names().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>` : ''}
       <label class="fld"><span>Na bazie</span><select id="n-base">
         <option value="tpl">${sum ? 'Szablon sesji SUM (5 bloków)' : 'Szablon MC (6 bloków)'}</option>
+        ${sb ? '<option value="tpl-sum">Szablon sesji SUM (5 bloków)</option><option value="empty">Pusty plan</option>' : ''}
         ${pool.length ? `<optgroup label="Skopiuj plan i notatki z…">${pool.map(m => `<option value="${m.id}"${s.base === m.id ? ' selected' : ''}>${esc((m.date ? shortDate(m.date) + ' · ' : '') + (m.title || 'Bez nazwy'))}${m.initiative !== s.init ? ' (' + INIT[m.initiative].name + ')' : ''}</option>`).join('')}</optgroup>` : ''}
       </select></label>
       <div class="row"><button type="button" class="btn ghost" data-act="sheet-close">Anuluj</button><button type="button" class="btn primary" data-act="create">Utwórz i otwórz</button></div>`;
@@ -915,7 +973,7 @@ function sheetHtml(){
     inner = `<h2>Osoby z dostępem</h2>${requestsHtml()}<p>Tylko te adresy Gmail mogą się zalogować. Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie jej spotkania, także przyszłe. Bez zaznaczenia widzi tylko spotkania, do których dodasz ją przyciskiem „Kto widzi”. Bazę gier widzą wszyscy, ogłoszenia tylko zaznaczeni. Zmiany działają po odświeżeniu strony u tej osoby.</p>
       ${ps.length ? `<ul class="people">${ps.map(([em, p]) => `<li data-em="${esc(em)}"><div class="people-h"><div>${esc(p.name || em)}<small>${esc(em)}</small></div>
         <button type="button" class="btn sm danger-ghost" data-act="del-person">${S.confirm === em ? 'Na pewno? Odbierz' : 'Odbierz dostęp'}</button></div>
-        <div class="chips" role="group" aria-label="Uprawnienia: ${esc(p.name || em)}">${Object.entries(INIT).map(([k, v]) => `<label class="chip"><input type="checkbox" data-pacc="${k}"${(p.inits || []).includes(k) ? ' checked' : ''}> ${v.name}: wszystko</label>`).join('')}
+        <div class="chips" role="group" aria-label="Uprawnienia: ${esc(p.name || em)}">${REAL.map(k => [k, INIT[k]]).map(([k, v]) => `<label class="chip"><input type="checkbox" data-pacc="${k}"${(p.inits || []).includes(k) ? ' checked' : ''}> ${v.name}: wszystko</label>`).join('')}
           <label class="chip"><input type="checkbox" data-pacc="ann"${p.ann ? ' checked' : ''}> Ogłoszenia</label></div>
         <small class="people-sum">${accessSummary(p)}</small></li>`).join('')}</ul>` : '<p class="empty">Nikt poza Tobą nie ma jeszcze dostępu.</p>'}
       <div class="meta-row"><label class="fld"><span>Imię</span><input id="p-name" autocomplete="off"></label>
@@ -940,14 +998,14 @@ const ENERGY = { spokojna: 'Spokojna', srednia: 'Średnia energia', wysoka: 'Wys
 const gameHasDesc = g => !!((g.rules || '').trim() || (g.link || '').trim());
 function gameLastUsed(gid){
   let best = null;
-  Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date) return; (m.items || []).forEach(function w(it){ if (it.gameId === gid && (!best || m.date > best.date)) best = m; (it.children || []).forEach(w); }); });
+  Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date || m.initiative === 'sandbox') return; (m.items || []).forEach(function w(it){ if (it.gameId === gid && (!best || m.date > best.date)) best = m; (it.children || []).forEach(w); }); });
   return best;
 }
 const dayNo = d => { const [y, m, dd] = d.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, dd) / 864e5); };
 function gameRecent(gid, ref, exceptMid){
   // Najbliższe użycie gry w innym spotkaniu w promieniu 21 dni od daty odniesienia.
   let best = null; const r = dayNo(ref || todayStr());
-  Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date || m.id === exceptMid) return; const d = Math.abs(dayNo(m.date) - r); if (d > 21) return;
+  Object.values(S.meetings).forEach(m => { if (m.deletedAt || !m.date || m.id === exceptMid || m.initiative === 'sandbox') return; const d = Math.abs(dayNo(m.date) - r); if (d > 21) return;
     (m.items || []).forEach(function w(it){ if (it.gameId === gid && (!best || d < best.days)) best = { m, days: d }; (it.children || []).forEach(w); }); });
   return best;
 }
@@ -1064,7 +1122,7 @@ function annSheetHtml(a){
     <label class="fld"><span>Tytuł</span><input id="a-${a.id}-title" data-af="title" value="${esc(a.title || '')}" placeholder="np. Wyjazd w styczniu"></label>
     <label class="fld"><span>Do powiedzenia</span><textarea id="a-${a.id}-text" data-af="text" rows="3" placeholder="Co mówisz ze sceny">${esc(a.text || '')}</textarea></label>
     <label class="fld"><span>Ważne do</span><input id="a-${a.id}-until" data-af="until" type="date" value="${esc(a.until || '')}"></label>
-    <fieldset class="fld"><span>Gdzie ogłaszać</span><div class="chips">${Object.entries(INIT).map(([k, v]) => `<label class="chip"><input type="checkbox" data-ainit="${k}"${(a.inits || []).includes(k) ? ' checked' : ''}> ${v.name}</label>`).join('')}</div></fieldset>
+    <fieldset class="fld"><span>Gdzie ogłaszać</span><div class="chips">${REAL.map(k => [k, INIT[k]]).map(([k, v]) => `<label class="chip"><input type="checkbox" data-ainit="${k}"${(a.inits || []).includes(k) ? ' checked' : ''}> ${v.name}</label>`).join('')}</div></fieldset>
     <div class="row"><button type="button" class="btn danger-ghost" data-act="del-ann">Przenieś do kosza</button><span class="sp"></span><button type="button" class="btn primary" data-act="sheet-close">Gotowe</button></div>`;
 }
 function annPickHtml(){
@@ -1227,9 +1285,9 @@ function createMeeting(){
   const date = $('#n-date').value;
   let title = $('#n-title').value.trim();
   if (!title) title = sum ? 'Sesja ' + (sessionsOf(s.zid).length + 1) : INIT[s.init].name + (date ? ' ' + shortDate(date) : '');
-  const src = base !== 'tpl' && S.meetings[base];
+  const src = !/^(tpl|tpl-sum|empty)$/.test(base) && S.meetings[base];
   const m = { id: rid(), initiative: s.init, zjazdId: sum ? s.zid : null, title, date, start: $('#n-start').value || (src && src.start) || '',
-    mc: sum ? ($('#n-mc').value || '').trim() : '', items: src ? cloneItems(src.items) : (sum ? templateSum() : templateMlo()),
+    mc: sum ? ($('#n-mc').value || '').trim() : '', items: src ? cloneItems(src.items) : base === 'empty' ? [] : (sum || base === 'tpl-sum' ? templateSum() : templateMlo()),
     trash: [], versions: [], members: newMembers(sum ? s.zid : null), createdAt: Date.now(), deletedAt: null };
   S.meetings[m.id] = m; persist('meetings', m.id); S.sheet = null; openMeeting(m.id);
 }
@@ -1336,6 +1394,9 @@ document.addEventListener('click', e => {
     case 'insert-ann': S.sheet = { type: 'ann-pick', itemId: r.item.id }; render(); break;
     case 'pick-ann': insertAnn(S.ann[a.dataset.aid]); break;
     case 'help': S.sheet = { type: 'help' }; render(); break;
+    case 'sandbox-demo': sandboxDemo(); break;
+    case 'sandbox-clear': { if (S.confirm !== 'sandbox') { S.confirm = 'sandbox'; render(); break; } S.confirm = null; const now = Date.now();
+      Object.values(S.meetings).filter(m => isMineSandbox(m) && !m.deletedAt).forEach(m => { m.deletedAt = now; persist('meetings', m.id); }); render(); toast('Ćwiczenia przeniesione do kosza.'); break; }
     case 'req-send': sendRequest(); break;
     case 'req-cancel': F.deleteDoc(F.doc(FDB, 'requests', ME.email)).catch(writeErr); break;
     case 'req-accept': acceptRequest(a.closest('[data-rq]').dataset.rq); break;

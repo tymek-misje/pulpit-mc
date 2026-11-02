@@ -4,6 +4,7 @@ rules_version = '2';
 // Osoby z dostępem: dokumenty allow/<adres-gmail>, dodaje je administrator w aplikacji.
 // Spotkania i zjazdy widzi administrator oraz osoby z listy members danego dokumentu.
 // Osoba z polem inits (np. ["beloved"]) widzi wszystkie spotkania tych zakładek; "sum" daje też wszystkie zjazdy.
+// Nowe spotkania i zjazdy zakłada tylko osoba z inits danej zakładki. Piaskownica (initiative == "sandbox") jest wspólna dla wszystkich z dostępem.
 // Gry (games) widzą wszyscy z dostępem, ogłoszenia (ann) tylko osoby z ann == true. Trwale usuwa tylko administrator.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -18,7 +19,6 @@ service cloud.firestore {
     // Pełny dostęp do zakładki (beloved, source, sum) zaznaczony przez administratora.
     function hasInit(i) { return hasAllow() && i in myAllow().get('inits', []); }
     function annOK() { return isAdmin() || (signedIn() && hasAllow() && myAllow().get('ann', false) == true); }
-    function zjazdMembers(zid) { return get(/databases/$(database)/documents/zjazdy/$(zid)).data.members; }
 
     match /admins/{email} {
       allow read: if signedIn() && me() == email;
@@ -39,7 +39,7 @@ service cloud.firestore {
     }
     match /zjazdy/{id} {
       allow read: if isAdmin() || (allowed() && (hasInit('sum') || isMember(resource.data)));
-      allow create: if isAdmin() || (allowed() && (hasInit('sum') || request.resource.data.members == [me()]));
+      allow create: if isAdmin() || (allowed() && hasInit('sum'));
       allow update: if isAdmin() || (allowed() && membersKept() && (hasInit('sum') || isMember(resource.data)));
       allow delete: if isAdmin() || (allowed() && (hasInit('sum') || isMember(resource.data)));
     }
@@ -52,16 +52,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     match /meetings/{id} {
-      allow read: if isAdmin() || (allowed() && (hasInit(resource.data.initiative) || isMember(resource.data)));
-      allow create: if isAdmin() || (allowed() && (
-        hasInit(request.resource.data.initiative) ||
-        request.resource.data.members == [me()] ||
-        (request.resource.data.zjazdId is string && isMember(request.resource.data)
-          && request.resource.data.members == zjazdMembers(request.resource.data.zjazdId))));
+      allow read: if isAdmin() || (allowed() && (resource.data.get('initiative', '') == 'sandbox' || hasInit(resource.data.get('initiative', '')) || isMember(resource.data)));
+      allow create: if isAdmin() || (allowed() && (request.resource.data.get('initiative', '') == 'sandbox' || hasInit(request.resource.data.get('initiative', ''))));
       allow update: if isAdmin() || (allowed() && membersKept() && (
-        isMember(resource.data) ||
-        (hasInit(resource.data.initiative) && hasInit(request.resource.data.initiative))));
-      allow delete: if isAdmin() || (allowed() && (hasInit(resource.data.initiative) || isMember(resource.data)));
+        (resource.data.get('initiative', '') == 'sandbox' && request.resource.data.get('initiative', '') == 'sandbox') ||
+        (isMember(resource.data) && request.resource.data.get('initiative', '') == resource.data.get('initiative', '')) ||
+        (hasInit(resource.data.get('initiative', '')) && hasInit(request.resource.data.get('initiative', '')))));
+      allow delete: if isAdmin() || (allowed() && (resource.data.get('initiative', '') == 'sandbox' || hasInit(resource.data.get('initiative', '')) || isMember(resource.data)));
     }
   }
 }

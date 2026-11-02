@@ -518,6 +518,9 @@ let FDB = null, AUTH = null, ME = null, IS_ADMIN = false, stopStage = null;
 const unsubs = [], hasPending = {};
 const cacheKey = () => 'mc-cache-v2-' + (ME ? ME.uid : 'local');
 const uniq = a => [...new Set(a.filter(Boolean))];
+function canCreate(init){ return IS_ADMIN || S.mode === 'local' || init === 'sandbox' || myInits().includes(init); }
+function myFirstName(){ return ME ? String((S.access && S.access.name) || ME.name || '').trim().split(/\s+/)[0].slice(0, 30) : ''; }
+const NO_CREATE = '<p class="hint">Nowe spotkania w tej zakładce zakłada osoba z dostępem do całej zakładki. Możesz edytować spotkania, które Ci udostępniono, a własne próby robić w 🧪 Piaskownicy.</p>';
 function newMembers(zid){
   if (!ME) return [];
   const z = zid && S.zjazdy[zid];
@@ -571,6 +574,7 @@ function subscribe(kind){
   if (kind === 'zjazdy' && inits.includes('sum')) return listen(kind, 'all', col);
   listen(kind, 'mem', F.query(col, F.where('members', 'array-contains', ME.email)));
   if (kind === 'meetings' && inits.length) listen(kind, 'init', F.query(col, F.where('initiative', 'in', inits)));
+  if (kind === 'meetings') listen(kind, 'sandbox', F.query(col, F.where('initiative', '==', 'sandbox')));
 }
 function listen(kind, key, q){
   SRC[kind] = SRC[kind] || {};
@@ -691,6 +695,7 @@ function cardHtml(m, snip){
     <span class="card-meta">${blocks} ${pl(blocks, 'blok', 'bloki', 'bloków')}${t ? '<br>' + t + ' min' : ''}</span>
     <span class="card-title">${esc(m.title || 'Bez nazwy')}</span>
     ${m.mc ? `<span class="card-sub">MC: ${esc(m.mc)}</span>` : ''}
+    ${m.initiative === 'sandbox' && m.author ? `<span class="card-sub">Zaczął(a): ${esc(m.author)}</span>` : ''}
     ${snip ? `<span class="card-snip">${snip}</span>` : ''}
   </button>`;
 }
@@ -700,22 +705,24 @@ function listHtml(init){
   const up = ms.filter(m => !m.date || m.date >= t).sort((a, b) => (a.date || '9').localeCompare(b.date || '9') || (a.start || '').localeCompare(b.start || ''));
   const past = ms.filter(m => m.date && m.date < t).sort((a, b) => b.date.localeCompare(a.date));
   const loading = S.mode === 'loading' || (S.mode === 'db' && !S.loaded && !ms.length);
-  return `<button type="button" class="btn primary big" data-act="new" data-k="${init}">+ Nowe spotkanie ${INIT[init].name}</button>
+  return `${canCreate(init) ? `<button type="button" class="btn primary big" data-act="new" data-k="${init}">+ Nowe spotkanie ${INIT[init].name}</button>` : NO_CREATE}
     <h2 class="sec">Nadchodzące</h2>
     ${up.length ? `<div class="cards">${up.map(cardHtml).join('')}</div>` : `<p class="empty">${loading ? 'Wczytuję spotkania…' : 'Brak zaplanowanych spotkań. Utwórz pierwsze z szablonu MC i uzupełnij notatki.'}</p>`}
     ${ms.length ? archiveHtml(init) : ''}`;
 }
-/* ---------- Piaskownica: prywatne ćwiczenia i samouczek ---------- */
+/* ---------- Piaskownica: wspólne ćwiczenia i samouczek ---------- */
 function isMineSandbox(m){ return m.initiative === 'sandbox' && (!ME || (m.members || []).includes(ME.email)); }
 function sandboxHtml(){
-  const ms = Object.values(S.meetings).filter(m => isMineSandbox(m) && !m.deletedAt).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const ms = Object.values(S.meetings).filter(m => m.initiative === 'sandbox' && !m.deletedAt).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const mine = ms.filter(isMineSandbox);
   const step = (t, d) => `<li><b>${t}</b><span>${d}</span></li>`;
   return `<section class="sandbox-intro"><h2>🧪 Piaskownica</h2>
-      <p>Miejsce do nauki i zabawy. Ćwiczenia widzisz tylko Ty, nie trafiają do archiwum ani do statystyk gier. Możesz tu wszystko psuć.</p>
-      <div class="row" style="justify-content:flex-start"><button type="button" class="btn primary" data-act="sandbox-demo">Utwórz przykładowe spotkanie</button><button type="button" class="btn" data-act="new" data-k="sandbox">+ Własne ćwiczenie</button></div></section>
-    <h2 class="sec">Twoje ćwiczenia</h2>
+      <p>Wspólne miejsce do nauki i zabawy. Każdy z dostępem może tu tworzyć spotkania, widzi ćwiczenia innych i może je razem z nimi zmieniać. Nic stąd nie trafia do archiwum ani do statystyk gier.</p>
+      <div class="row" style="justify-content:flex-start"><button type="button" class="btn primary" data-act="sandbox-demo">Gotowy przykład</button><button type="button" class="btn" data-act="new" data-k="sandbox">+ Nowe spotkanie</button></div>
+      <p class="hint">„Gotowy przykład” od razu tworzy wypełniony plan, na którym przejdziesz zadania poniżej. „+ Nowe spotkanie” działa jak w zakładkach: wybierasz szablon, pusty plan albo kopię innego spotkania.</p></section>
+    <h2 class="sec">Ćwiczenia wszystkich</h2>
     ${ms.length ? `<div class="cards">${ms.map(cardHtml).join('')}</div>
-      <div class="row"><button type="button" class="btn sm danger-ghost" data-act="sandbox-clear">${S.confirm === 'sandbox' ? 'Na pewno? Do kosza' : 'Wyczyść piaskownicę'}</button></div>` : '<p class="empty">Jeszcze nic tu nie ma. Zacznij od przykładowego spotkania.</p>'}
+      ${mine.length ? `<div class="row"><button type="button" class="btn sm danger-ghost" data-act="sandbox-clear">${S.confirm === 'sandbox' ? 'Na pewno? Do kosza' : 'Usuń moje ćwiczenia (' + mine.length + ')'}</button></div>` : ''}` : '<p class="empty">Jeszcze nic tu nie ma. Zacznij od przykładowego spotkania.</p>'}
     <h2 class="sec">Spróbuj po kolei</h2>
     <ol class="tasks">
       ${step('Otwórz przykładowe spotkanie', 'Dotknij punktu, żeby zobaczyć pola: kto prowadzi, czas, „Do powiedzenia” i „Uwaga dla MC”.')}
@@ -731,7 +738,7 @@ function sandboxHtml(){
     <ul class="map">
       <li><b>Beloved, Source Youth, SUM</b><span>prawdziwe spotkania. Na SUM najpierw zjazd, w nim sesje.</span></li>
       <li><b>Baza</b><span>gry${canAnn() ? ' i ogłoszenia' : ''}, wspólne dla zespołu.</span></li>
-      <li><b>🧪</b><span>ta piaskownica.</span></li>
+      <li><b>🧪</b><span>ta piaskownica, wspólna dla wszystkich.</span></li>
       <li><b>?</b><span>instrukcja w pigułce.</span></li>
       <li><b>Kółko z literą</b><span>konto i wylogowanie${IS_ADMIN ? ', osoby z dostępem, prośby i kopia zapasowa' : ''}.</span></li>
       <li><b>Kosz</b><span>na dole strony głównej: usunięte spotkania leżą tam 30 dni.</span></li>
@@ -746,7 +753,7 @@ function sandboxDemo(){
     B('📣 Ogłoszenia końcowe', [P('O następnym spotkaniu', { minutes: 2, say: 'Widzimy się za tydzień o tej samej porze.' }), P('Punkt do ukrycia', { hidden: true, note: 'Ten punkt jest ukryty, więc nie pojawi się na scenie.' })], { leader: 'MC' }),
   ];
   const m = { id: rid(), initiative: 'sandbox', zjazdId: null, title: 'Przykładowe spotkanie', date: todayStr(), start: '19:00', mc: '', items,
-    trash: [], versions: [], members: newMembers(null), createdAt: Date.now(), deletedAt: null };
+    trash: [], versions: [], members: newMembers(null), author: myFirstName(), createdAt: Date.now(), deletedAt: null };
   S.meetings[m.id] = m; persist('meetings', m.id); openMeeting(m.id);
   toast('Utworzono przykładowe spotkanie. Możesz tu wszystko zmieniać.');
 }
@@ -776,7 +783,7 @@ function searchMeeting(m, q){
   return null;
 }
 function archItem(m, snip){
-  return `<div class="arch-item">${cardHtml(m, snip)}<button type="button" class="btn sm" data-act="reuse" data-mid="${m.id}">Użyj jako bazy</button></div>`;
+  return `<div class="arch-item">${cardHtml(m, snip)}${canCreate(m.initiative) ? `<button type="button" class="btn sm" data-act="reuse" data-mid="${m.id}">Użyj jako bazy</button>` : ''}</div>`;
 }
 function archiveResults(init){
   const q = norm((S.q || '').trim());
@@ -798,7 +805,7 @@ function archiveHtml(init){
 }
 function sumHtml(){
   const zs = Object.values(S.zjazdy).filter(z => !z.deletedAt).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return `<button type="button" class="btn primary big" data-act="new-zjazd">+ Nowy zjazd SUM</button>
+  return `${canCreate('sum') ? '<button type="button" class="btn primary big" data-act="new-zjazd">+ Nowy zjazd SUM</button>' : NO_CREATE}
     ${Object.values(S.meetings).some(m => m.initiative === 'sum' && !m.deletedAt) ? archiveHtml('sum') : ''}
     ${zs.length ? zs.map(zjazdHtml).join('') : `<p class="empty">${S.mode === 'db' && !S.loaded ? 'Wczytuję zjazdy…' : 'SUM ma 5 zjazdów w roku, a każdy około 7 sesji. Dodaj zjazd, potem jego sesje i przypisz MC do każdej.'}</p>`}`;
 }
@@ -813,7 +820,7 @@ function zjazdHtml(z){
       <label class="fld"><span>Zespół MC (imiona po przecinku)</span><input id="z-${z.id}-team" data-zf="team" value="${esc(z.team)}"></label>
       <div class="row">${IS_ADMIN ? `<button type="button" class="btn sm" data-act="members" data-kind="zjazdy" data-oid="${z.id}">Kto widzi (${(z.members || []).length})</button>` : ''}<button type="button" class="btn sm danger-ghost" data-act="del-zjazd">Przenieś zjazd do kosza</button></div>` : ''}
     ${ss.length ? `<div class="cards">${ss.map(cardHtml).join('')}</div>` : '<p class="empty">Brak sesji w tym zjeździe.</p>'}
-    <div class="row"><button type="button" class="btn" data-act="new" data-k="sum">+ Sesja</button></div>
+    ${canCreate('sum') ? '<div class="row"><button type="button" class="btn" data-act="new" data-k="sum">+ Sesja</button></div>' : ''}
   </section>`;
 }
 function homeTrashHtml(){
@@ -842,8 +849,8 @@ function editorHtml(){
   <main class="wrap">
     <section class="meta-card">
       <div class="eyebrow"><span>${INIT[m.initiative].name}${zj ? ' · ' + esc(zj.title) : ''}</span>${syncHtml()}</div>
-      ${m.initiative === 'sandbox' ? '<div class="banner"><span>🧪 Ćwiczenie w piaskownicy. Widzisz je tylko Ty, możesz tu wszystko psuć.</span></div>' : ''}
-      ${m.date && m.date < todayStr() && m.initiative !== 'sandbox' ? `<div class="banner"><span>Spotkanie z archiwum (${fmtDate(m.date)}).</span><button type="button" class="btn sm" data-act="reuse" data-mid="${m.id}">Użyj jako bazy nowego</button></div>` : ''}
+      ${m.initiative === 'sandbox' ? `<div class="banner"><span>🧪 Ćwiczenie we wspólnej piaskownicy${m.author ? ' · zaczął(a): ' + esc(m.author) : ''}. Widzą je wszyscy z dostępem i każdy może je zmieniać.</span></div>` : ''}
+      ${m.date && m.date < todayStr() && m.initiative !== 'sandbox' ? `<div class="banner"><span>Spotkanie z archiwum (${fmtDate(m.date)}).</span>${canCreate(m.initiative) ? `<button type="button" class="btn sm" data-act="reuse" data-mid="${m.id}">Użyj jako bazy nowego</button>` : ''}</div>` : ''}
       <input class="title-input" id="m-title" data-mf="title" value="${esc(m.title)}" aria-label="Nazwa spotkania" placeholder="Nazwa spotkania">
       <div class="meta-row">
         <label class="fld"><span>Data</span><input type="date" id="m-date" data-mf="date" value="${esc(m.date)}"></label>
@@ -862,7 +869,7 @@ function editorHtml(){
       <button type="button" class="btn" data-act="versions">Historia wersji (${(m.versions || []).length})</button>
       <button type="button" class="btn" data-act="trash-items">Kosz elementów (${(m.trash || []).length})</button>
       ${IS_ADMIN && m.initiative !== 'sandbox' ? `<button type="button" class="btn" data-act="members" data-kind="meetings" data-oid="${m.id}">Kto widzi (${(m.members || []).length})</button>` : ''}
-      <button type="button" class="btn" data-act="duplicate">Duplikuj spotkanie</button>
+      ${canCreate(m.initiative) ? '<button type="button" class="btn" data-act="duplicate">Duplikuj spotkanie</button>' : ''}
       ${m.actual ? `<button type="button" class="btn" data-act="clear-times">Wyczyść czasy ze sceny</button>` : ''}
       <button type="button" class="btn danger-ghost" data-act="del-meeting">Przenieś spotkanie do kosza</button>
     </section>
@@ -925,7 +932,7 @@ function sheetHtml(){
   if (s.type === 'new') {
     const sum = s.init === 'sum', z = sum && S.zjazdy[s.zid];
     const sb = s.init === 'sandbox';
-    const pool = Object.values(S.meetings).filter(m => !m.deletedAt && (sb ? isMineSandbox(m) || m.initiative !== 'sandbox' : sum ? m.initiative === 'sum' : m.initiative !== 'sum' && m.initiative !== 'sandbox')).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const pool = Object.values(S.meetings).filter(m => !m.deletedAt && (sb ? true : sum ? m.initiative === 'sum' : m.initiative !== 'sum' && m.initiative !== 'sandbox')).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const nextNo = sum ? sessionsOf(s.zid).length + 1 : 0;
     inner = `<h2>${sum ? 'Nowa sesja · ' + esc(z ? z.title : 'SUM') : 'Nowe spotkanie · ' + INIT[s.init].name}</h2>
       <label class="fld"><span>Nazwa</span><input id="n-title" value="${sum ? 'Sesja ' + nextNo : ''}" placeholder="${sum ? 'Sesja ' + nextNo : INIT[s.init].name + ' ' + shortDate(todayStr())}"></label>
@@ -970,7 +977,7 @@ function sheetHtml(){
       <div class="row"><button type="button" class="btn ghost" data-act="sheet-close">Zamknij</button><button type="button" class="btn danger-ghost" data-act="logout">Wyloguj</button></div>`;
   } else if (s.type === 'people') {
     const ps = Object.entries(S.people).sort((a, b) => (a[1].name || a[0]).localeCompare(b[1].name || b[0], 'pl'));
-    inner = `<h2>Osoby z dostępem</h2>${requestsHtml()}<p>Tylko te adresy Gmail mogą się zalogować. Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie jej spotkania, także przyszłe. Bez zaznaczenia widzi tylko spotkania, do których dodasz ją przyciskiem „Kto widzi”. Bazę gier widzą wszyscy, ogłoszenia tylko zaznaczeni. Zmiany działają po odświeżeniu strony u tej osoby.</p>
+    inner = `<h2>Osoby z dostępem</h2>${requestsHtml()}<p>Tylko te adresy Gmail mogą się zalogować. Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie jej spotkania, także przyszłe, i będzie mogła zakładać nowe. Bez zaznaczenia widzi i edytuje tylko spotkania, do których dodasz ją przyciskiem „Kto widzi”, a nowe zakłada tylko w piaskownicy. Bazę gier widzą wszyscy, ogłoszenia tylko zaznaczeni. Zmiany działają po odświeżeniu strony u tej osoby.</p>
       ${ps.length ? `<ul class="people">${ps.map(([em, p]) => `<li data-em="${esc(em)}"><div class="people-h"><div>${esc(p.name || em)}<small>${esc(em)}</small></div>
         <button type="button" class="btn sm danger-ghost" data-act="del-person">${S.confirm === em ? 'Na pewno? Odbierz' : 'Odbierz dostęp'}</button></div>
         <div class="chips" role="group" aria-label="Uprawnienia: ${esc(p.name || em)}">${REAL.map(k => [k, INIT[k]]).map(([k, v]) => `<label class="chip"><input type="checkbox" data-pacc="${k}"${(p.inits || []).includes(k) ? ' checked' : ''}> ${v.name}: wszystko</label>`).join('')}
@@ -1174,16 +1181,17 @@ function seedGames(){
 function helpHtml(){
   const sec = (q, body, open) => `<details class="help"${open ? ' open' : ''}><summary>${q}</summary><div>${body}</div></details>`;
   return `<h2>Instrukcja</h2><p>Pulpit MC służy do dwóch rzeczy: szybko przygotować plan spotkania i poprowadzić je z telefonu.</p>
-  ${sec('Jak przygotować spotkanie?', `<ol><li>Wybierz zakładkę (Beloved, Source Youth albo SUM) i dotknij „+ Nowe spotkanie”.</li><li>W „Na bazie” wybierz szablon MC albo skopiuj plan z poprzedniego spotkania.</li><li>Dotknij punktu, żeby go otworzyć. Wpisz, kto prowadzi, ile trwa, co mówisz („Do powiedzenia”) i przypomnienie tylko dla siebie („Uwaga dla MC”).</li><li>Kolejność zmienisz, przeciągając za ⠿ albo strzałkami. Punkt, który może wrócić, lepiej ukryć niż usuwać.</li><li>„Pokaż luki” zaznacza punkty bez prowadzącego albo bez notatki.</li></ol><p>Wszystko zapisuje się samo.</p>`, true)}
+  ${sec('Jak przygotować spotkanie?', `<ol><li>Wybierz zakładkę (Beloved, Source Youth albo SUM) i dotknij „+ Nowe spotkanie”. Ten przycisk widzi osoba z dostępem do całej zakładki. Jeśli go nie masz, edytujesz spotkania, które Ci udostępniono.</li><li>W „Na bazie” wybierz szablon MC albo skopiuj plan z poprzedniego spotkania.</li><li>Dotknij punktu, żeby go otworzyć. Wpisz, kto prowadzi, ile trwa, co mówisz („Do powiedzenia”) i przypomnienie tylko dla siebie („Uwaga dla MC”).</li><li>Kolejność zmienisz, przeciągając za ⠿ albo strzałkami. Punkt, który może wrócić, lepiej ukryć niż usuwać.</li><li>„Pokaż luki” zaznacza punkty bez prowadzącego albo bez notatki.</li></ol><p>Wszystko zapisuje się samo.</p>`, true)}
   ${sec('Jak prowadzić ze sceny?', `<ul><li>„Scena” otwiera plan od początku, a „▶ Scena od tego punktu” od wybranego miejsca.</li><li>„Dalej” albo przesunięcie palcem w lewo to następny punkt, ‹ to poprzedni. Nazwa następnego punktu jest na przycisku „Dalej”, a poprzedniego w szarej linii „było”.</li><li>☰ w lewym górnym rogu pokazuje cały plan. Dotknij punktu, żeby tam przejść.</li><li>A− i A+ zmieniają wielkość tekstu.</li><li>Żeby wyjść, przytrzymaj „Wyjdź”.</li><li>Pomarańczowa kropka przy zegarze oznacza, że ekran może zgasnąć. Ustaw w telefonie dłuższą autoblokadę.</li></ul>`)}
   ${sec('Jak dać plan komuś, kto nie ma konta?', `<p>W spotkaniu dotknij „Wyślij link sceny” i wyślij link. Otworzy się w każdej przeglądarce, bez logowania. To kopia planu z tej chwili: po zmianach wyślij nowy link.</p>`)}
   ${sec('Jak korzystać z bazy gier?', `<ul><li>Zakładka „Baza”: szukaj po nazwie i opisie, filtruj po kategorii i energii, a „🎲 Losuj” podsunie grę, której dawno nie było.</li><li>W planie otwórz punkt i dotknij „🎳 Wstaw grę”. Czas, zasady i link trafią do planu.</li><li>Czerwony znacznik „była DD.MM” oznacza, że gra była w ostatnich 3 tygodniach.</li><li>Dopisuj zasady, miejsce i sprzęt. „Brak opisu” pokazuje, czego jeszcze brakuje.</li></ul>`)}
   ${canAnn() ? sec('Jak działają ogłoszenia?', `<p>W „Baza → Ogłoszenia” wpisz ogłoszenie raz, z datą ważności i grupą. W planie dotknij „📣 Wstaw ogłoszenie”, a zobaczysz tylko te aktualne w dniu spotkania.</p>`) : ''}
   ${sec('Jak zaplanować zjazd SUM?', `<p>W zakładce SUM dodaj zjazd, uzupełnij daty i zespół MC, a potem dodawaj sesje. Każda sesja ma własny plan i swoje „MC sesji”.</p>`)}
+  ${sec('Do czego jest 🧪 Piaskownica?', `<p>To wspólne miejsce do ćwiczeń. Każdy z dostępem może tu założyć spotkanie, widzi ćwiczenia innych i może je razem z nimi zmieniać. Nic stąd nie trafia do archiwum ani do statystyk gier. Na karcie widać, kto zaczął ćwiczenie.</p>`)}
   ${sec('Co, jeśli coś usunę albo zepsuję?', `<ul><li>„Cofnij” na górze odwraca ostatnie zmiany.</li><li>„Kosz elementów” i „Historia wersji” są na dole spotkania.</li><li>Usunięte spotkania leżą w koszu na stronie głównej przez 30 dni.</li></ul>`)}
   ${sec('Czy działa bez internetu?', `<p>Tak, jeśli plan był wcześniej otwarty na tym telefonie. Zmiany wyślą się, gdy wróci sieć. Na wszelki wypadek „Pobierz na telefon” zapisze plik, który działa całkiem bez sieci.</p>`)}
   ${sec('Jak dodać ikonę na ekran telefonu?', `<p>iPhone: otwórz stronę w Safari, dotknij „Udostępnij” i wybierz „Do ekranu początkowego”. Android: w Chrome menu ⋮ i „Dodaj do ekranu głównego”. Nie wylogowuj się na swoim telefonie, wtedy plan działa też bez sieci.</p>`)}
-  ${IS_ADMIN ? sec('Dla administratora: kto co widzi?', `<ul><li>Konto → „Osoby z dostępem”: dodaj Gmail i imię. Bez tego nikt się nie zaloguje.</li><li>Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie spotkania tej zakładki, także przyszłe.</li><li>Bez zaznaczeń osoba widzi tylko spotkania, do których dodasz ją w spotkaniu przyciskiem „Kto widzi”. Przy SUM zrób to w zjeździe, to obejmie wszystkie jego sesje.</li><li>„Ogłoszenia” zaznaczasz osobno. Bazę gier widzą wszyscy.</li><li>Raz w miesiącu pobierz „Kopię zapasową” z dołu strony głównej.</li></ul>`) : ''}
+  ${IS_ADMIN ? sec('Dla administratora: kto co widzi?', `<ul><li>Konto → „Osoby z dostępem”: dodaj Gmail i imię. Bez tego nikt się nie zaloguje.</li><li>Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie spotkania tej zakładki, także przyszłe.</li><li>Bez zaznaczeń osoba widzi tylko spotkania, do których dodasz ją w spotkaniu przyciskiem „Kto widzi”. Przy SUM zrób to w zjeździe, to obejmie wszystkie jego sesje.</li><li>Nowe spotkania w zakładce zakładają tylko osoby z „wszystko” przy tej zakładce. Osoba z wybranymi spotkaniami może je edytować, ale nowe zakłada tylko w 🧪 Piaskownicy.</li><li>„Ogłoszenia” zaznaczasz osobno. Bazę gier i piaskownicę widzą wszyscy.</li><li>Raz w miesiącu pobierz „Kopię zapasową” z dołu strony głównej.</li></ul>`) : ''}
   <div class="row"><button type="button" class="btn primary" data-act="sheet-close">Zamknij</button></div>`;
 }
 
@@ -1242,7 +1250,7 @@ async function acceptRequest(em){
 }
 function accessSummary(p){
   const ini = (p.inits || []).filter(k => INIT[k]).map(k => INIT[k].name);
-  return (ini.length ? 'Widzi wszystko w: ' + ini.join(', ') + '. ' : 'Widzi tylko spotkania dodane w „Kto widzi”. ') + (p.ann ? 'Ma ogłoszenia.' : 'Bez ogłoszeń.');
+  return (ini.length ? 'Widzi wszystko w: ' + ini.join(', ') + '. ' : 'Widzi i edytuje tylko spotkania dodane w „Kto widzi”. ') + (p.ann ? 'Ma ogłoszenia.' : 'Bez ogłoszeń.');
 }
 function setAccess(em, k, on){
   const p = S.people[em] || {}; let patch;
@@ -1288,7 +1296,7 @@ function createMeeting(){
   const src = !/^(tpl|tpl-sum|empty)$/.test(base) && S.meetings[base];
   const m = { id: rid(), initiative: s.init, zjazdId: sum ? s.zid : null, title, date, start: $('#n-start').value || (src && src.start) || '',
     mc: sum ? ($('#n-mc').value || '').trim() : '', items: src ? cloneItems(src.items) : base === 'empty' ? [] : (sum || base === 'tpl-sum' ? templateSum() : templateMlo()),
-    trash: [], versions: [], members: newMembers(sum ? s.zid : null), createdAt: Date.now(), deletedAt: null };
+    trash: [], versions: [], members: newMembers(sum ? s.zid : null), author: myFirstName(), createdAt: Date.now(), deletedAt: null };
   S.meetings[m.id] = m; persist('meetings', m.id); S.sheet = null; openMeeting(m.id);
 }
 function stageData(m){ return { title: m.title, date: m.date, start: m.start, mc: m.mc, initiativeName: INIT[m.initiative].name + (m.zjazdId && S.zjazdy[m.zjazdId] ? ' · ' + S.zjazdy[m.zjazdId].title : ''), items: m.items }; }
@@ -1427,7 +1435,7 @@ document.addEventListener('click', e => {
       const parent = t.parentId ? m.items.find(b => b.id === t.parentId) : null, list = t.parentId ? (parent ? parent.children : m.items) : m.items;
       list.splice(Math.min(t.index, list.length), 0, t.item); persist('meetings', m.id); S.sheet = null; render(); toast('Przywrócono „' + (t.item.title || 'Bez nazwy') + '”.'); break; }
     case 'restore-version': { const v = m.versions[Number(a.closest('[data-vi]').dataset.vi)]; S.undo.push({ id: m.id, items: clone(m.items), trash: clone(m.trash || []), label: 'przywrócenie wersji' }); m.items = cloneItems(v.items); persist('meetings', m.id); S.sheet = null; render(); toast('Przywrócono wersję z ' + fmtStamp(v.at) + '.', 'Cofnij', doUndo); break; }
-    case 'duplicate': { const c = { ...clone(m), id: rid(), title: m.title + ' (kopia)', items: cloneItems(m.items), trash: [], versions: [], actual: null, members: newMembers(m.zjazdId), createdAt: Date.now(), deletedAt: null }; S.meetings[c.id] = c; persist('meetings', c.id); openMeeting(c.id); toast('Utworzono kopię spotkania.'); break; }
+    case 'duplicate': { const c = { ...clone(m), id: rid(), title: m.title + ' (kopia)', items: cloneItems(m.items), trash: [], versions: [], actual: null, members: newMembers(m.zjazdId), author: myFirstName(), createdAt: Date.now(), deletedAt: null }; S.meetings[c.id] = c; persist('meetings', c.id); openMeeting(c.id); toast('Utworzono kopię spotkania.'); break; }
     case 'del-meeting': { m.deletedAt = Date.now(); persist('meetings', m.id); S.view = 'home'; render(); toast('Spotkanie przeniesione do kosza.', 'Cofnij', () => { m.deletedAt = null; persist('meetings', m.id); openMeeting(m.id); }); break; }
     case 'stage-link': makeStageLink(m).then(url => { S.sheet = { type: 'link', url }; render(); }).catch(() => toast('Nie udało się utworzyć linku.')); break;
     case 'copy-link': { const u = S.sheet && S.sheet.url; const ta = $('#link-text'); try { navigator.clipboard.writeText(u).then(() => toast('Skopiowano link.'), () => { ta.select(); toast('Zaznaczyłem link, skopiuj go ręcznie.'); }); } catch (err) { ta.select(); toast('Zaznaczyłem link, skopiuj go ręcznie.'); } break; }

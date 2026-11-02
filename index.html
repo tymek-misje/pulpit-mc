@@ -183,6 +183,16 @@ fieldset.fld{border:0;padding:0;margin:0}
 .rolled-h{display:flex;align-items:center;gap:var(--s2);font-weight:700;color:var(--accent)}
 .rolled-h span{flex:1}
 .hint{margin:0;color:var(--ink-2);font-size:14px}
+.help-b{font-size:18px;color:var(--ink-2)}
+details.help{border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
+details.help summary{padding:var(--s3) var(--s4);min-height:48px;display:flex;align-items:center;font-weight:700;cursor:pointer}
+details.help>div{padding:0 var(--s4) var(--s3);color:var(--ink)}
+details.help ol,details.help ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px}
+details.help p{color:var(--ink);margin:6px 0 0}
+.people{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--s3)}
+.people>li{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s3);border:1px solid var(--line);border-radius:var(--r)}
+.people-h{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);flex-wrap:wrap}
+.people small{display:block;color:var(--ink-2)}
 .tab{padding:0 4px;line-height:1.15}
 .sheet .sp{flex:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -537,21 +547,31 @@ function syncFromMeta(){
 window.addEventListener('online', syncFromMeta);
 window.addEventListener('offline', syncFromMeta);
 
+const SRC = {};
+function myInits(){ return IS_ADMIN ? Object.keys(INIT) : ((S.access && S.access.inits) || []).filter(k => INIT[k]); }
+function canAnn(){ return IS_ADMIN || S.mode === 'local' || !!(S.access && S.access.ann); }
 function subscribe(kind){
   const col = F.collection(FDB, kind);
-  const shared = kind === 'games' || kind === 'ann';
-  const q = IS_ADMIN || shared ? col : F.query(col, F.where('members', 'array-contains', ME.email));
+  if (IS_ADMIN || kind === 'games' || kind === 'ann') return listen(kind, 'all', col);
+  const inits = myInits();
+  if (kind === 'zjazdy' && inits.includes('sum')) return listen(kind, 'all', col);
+  listen(kind, 'mem', F.query(col, F.where('members', 'array-contains', ME.email)));
+  if (kind === 'meetings' && inits.length) listen(kind, 'init', F.query(col, F.where('initiative', 'in', inits)));
+}
+function listen(kind, key, q){
+  SRC[kind] = SRC[kind] || {};
   unsubs.push(F.onSnapshot(q, { includeMetadataChanges: true }, snap => {
-    hasPending[kind] = snap.metadata.hasPendingWrites;
+    hasPending[kind + key] = snap.metadata.hasPendingWrites;
     if (snap.metadata.fromCache && snap.empty) { syncFromMeta(); return; }
     const changed = snap.docChanges().length > 0 || !S.loaded;
     if (changed) {
-      const next = {};
-      snap.docs.forEach(d => { next[d.id] = d.data(); });
+      SRC[kind][key] = {};
+      snap.docs.forEach(d => { SRC[kind][key][d.id] = d.data(); });
+      const next = Object.assign({}, ...Object.values(SRC[kind]));
       for (const k of pend.keys()) { const [kk, id] = k.split(':'); if (kk === kind) { if (S[kind][id]) next[id] = S[kind][id]; else delete next[id]; } }
       S[kind] = next; saveCache();
     }
-    if (kind === 'meetings' && !snap.metadata.fromCache) { S.loaded = true; purgeOld(); }
+    if (kind === 'meetings' && key !== 'init' && !snap.metadata.fromCache) { S.loaded = true; purgeOld(); }
     if (S.sync === 'loading' || S.sync === 'error') S.sync = 'saved';
     syncFromMeta();
     if (changed) softRender();
@@ -645,7 +665,7 @@ function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight 
 
 function homeHtml(){
   const tabs = `<nav class="tabs" role="tablist" aria-label="Inicjatywy">${['beloved','source','sum','base'].map(k => `<button type="button" role="tab" aria-selected="${S.tab === k}" class="tab" data-act="tab" data-k="${k}">${k === 'base' ? 'Baza' : INIT[k].name}</button>`).join('')}</nav>`;
-  return `<header class="bar"><h1 class="brand">Pulpit MC</h1><span class="sp"></span>${syncHtml()}${ME ? `<button type="button" class="avatar" data-act="account" aria-label="Konto: ${esc(ME.email)}">${esc((ME.name || ME.email).trim().charAt(0).toUpperCase())}</button>` : ''}</header>
+  return `<header class="bar"><h1 class="brand">Pulpit MC</h1><span class="sp"></span>${syncHtml()}<button type="button" class="avatar help-b" data-act="help" aria-label="Instrukcja">?</button>${ME ? `<button type="button" class="avatar" data-act="account" aria-label="Konto: ${esc(ME.email)}">${esc((ME.name || ME.email).trim().charAt(0).toUpperCase())}</button>` : ''}</header>
   <main class="wrap">${tabs}${S.tab === 'base' ? baseHtml() : S.tab === 'sum' ? sumHtml() : listHtml(INIT[S.tab] ? S.tab : 'beloved')}${homeTrashHtml()}
     ${IS_ADMIN || S.mode === 'local' ? '<div class="foot-tools"><button type="button" class="btn ghost sm" data-act="backup">Kopia zapasowa wszystkich danych (JSON)</button></div>' : ''}
   </main>`;
@@ -833,7 +853,7 @@ function panelHtml(it, i, n){
       <button type="button" class="btn sm" data-act="stage-here" ${it.hidden ? 'disabled' : ''}>▶ Scena od tego punktu</button>
       <button type="button" class="btn sm" data-act="hide">${it.hidden ? 'Pokaż' : 'Ukryj'}</button>
       ${it.kind === 'block' ? '<button type="button" class="btn sm" data-act="add-child">+ Podpunkt</button>' : ''}
-      ${it.kind !== 'divider' ? '<button type="button" class="btn sm" data-act="insert-game">🎳 Wstaw grę</button><button type="button" class="btn sm" data-act="insert-ann">📣 Wstaw ogłoszenie</button>' : ''}
+      ${it.kind !== 'divider' ? '<button type="button" class="btn sm" data-act="insert-game">🎳 Wstaw grę</button>' + (canAnn() ? '<button type="button" class="btn sm" data-act="insert-ann">📣 Wstaw ogłoszenie</button>' : '') : ''}
       <button type="button" class="btn sm danger-ghost" data-act="delete">Usuń</button>
     </div>
   </div>`;
@@ -876,19 +896,24 @@ function sheetHtml(){
   }
   else if (s.type === 'game') { const g = S.games[s.gid]; inner = g ? gameSheetHtml(g) : ''; }
   else if (s.type === 'game-pick') inner = gamePickHtml();
+  else if (s.type === 'help') inner = helpHtml();
   else if (s.type === 'ann') { const a = S.ann[s.aid]; inner = a ? annSheetHtml(a) : ''; }
   else if (s.type === 'ann-pick') inner = annPickHtml();
   else if (s.type === 'account') {
     inner = `<h2>Konto</h2><p>Zalogowano jako <b>${esc(ME ? ME.email : '')}</b>${IS_ADMIN ? ' (administrator)' : ''}.</p>
       ${IS_ADMIN ? `<div class="row" style="justify-content:flex-start"><button type="button" class="btn" data-act="people">Osoby z dostępem (${Object.keys(S.people).length})</button>
         <button type="button" class="btn" data-act="import">Wczytaj kopię (JSON)</button></div>` : ''}
+      <div class="row" style="justify-content:flex-start"><button type="button" class="btn" data-act="help">Instrukcja</button></div>
       <p>Wylogowanie usuwa z tego urządzenia zapisane plany. Na swoim telefonie zostań zalogowany, żeby plan działał też bez internetu.</p>
       <div class="row"><button type="button" class="btn ghost" data-act="sheet-close">Zamknij</button><button type="button" class="btn danger-ghost" data-act="logout">Wyloguj</button></div>`;
   } else if (s.type === 'people') {
     const ps = Object.entries(S.people).sort((a, b) => (a[1].name || a[0]).localeCompare(b[1].name || b[0], 'pl'));
-    inner = `<h2>Osoby z dostępem</h2><p>Tylko te adresy Gmail mogą się zalogować. Każda osoba widzi wyłącznie spotkania i zjazdy, do których ją dodasz przyciskiem „Kto widzi”.</p>
-      ${ps.length ? `<ul class="trash-list">${ps.map(([em, p]) => `<li data-em="${esc(em)}"><div>${esc(p.name || em)}<small>${esc(em)}</small></div>
-        <button type="button" class="btn sm danger-ghost" data-act="del-person">${S.confirm === em ? 'Na pewno? Odbierz' : 'Odbierz dostęp'}</button></li>`).join('')}</ul>` : '<p class="empty">Nikt poza Tobą nie ma jeszcze dostępu.</p>'}
+    inner = `<h2>Osoby z dostępem</h2><p>Tylko te adresy Gmail mogą się zalogować. Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie jej spotkania, także przyszłe. Bez zaznaczenia widzi tylko spotkania, do których dodasz ją przyciskiem „Kto widzi”. Bazę gier widzą wszyscy, ogłoszenia tylko zaznaczeni. Zmiany działają po odświeżeniu strony u tej osoby.</p>
+      ${ps.length ? `<ul class="people">${ps.map(([em, p]) => `<li data-em="${esc(em)}"><div class="people-h"><div>${esc(p.name || em)}<small>${esc(em)}</small></div>
+        <button type="button" class="btn sm danger-ghost" data-act="del-person">${S.confirm === em ? 'Na pewno? Odbierz' : 'Odbierz dostęp'}</button></div>
+        <div class="chips" role="group" aria-label="Uprawnienia: ${esc(p.name || em)}">${Object.entries(INIT).map(([k, v]) => `<label class="chip"><input type="checkbox" data-pacc="${k}"${(p.inits || []).includes(k) ? ' checked' : ''}> ${v.name}: wszystko</label>`).join('')}
+          <label class="chip"><input type="checkbox" data-pacc="ann"${p.ann ? ' checked' : ''}> Ogłoszenia</label></div>
+        <small class="people-sum">${accessSummary(p)}</small></li>`).join('')}</ul>` : '<p class="empty">Nikt poza Tobą nie ma jeszcze dostępu.</p>'}
       <div class="meta-row"><label class="fld"><span>Imię</span><input id="p-name" autocomplete="off"></label>
         <label class="fld"><span>Adres Gmail</span><input id="p-email" type="email" inputmode="email" autocomplete="off" autocapitalize="off" placeholder="imie@gmail.com"></label></div>
       <div class="row"><button type="button" class="btn ghost" data-act="sheet-close">Zamknij</button><button type="button" class="btn primary" data-act="add-person">Dodaj osobę</button></div>`;
@@ -969,6 +994,7 @@ function gameFilterHtml(){
 }
 function baseHtml(){
   const seg = `<div class="seg" role="group" aria-label="Baza">${[['gry', 'Gry'], ['ogl', 'Ogłoszenia']].map(([k, v]) => `<button type="button" class="seg-b" data-act="base-tab" data-k="${k}" aria-pressed="${(S.baseTab || 'gry') === k}">${v}</button>`).join('')}</div>`;
+  if (!canAnn()) return `<button type="button" class="btn primary big" data-act="new-game">+ Nowa gra</button>${gameFilterHtml()}<div class="cards" id="game-results">${gameResults(false)}</div>`;
   if ((S.baseTab || 'gry') === 'ogl') return seg + annHtml();
   const empty = !Object.values(S.games).some(g => !g.deletedAt);
   return seg + `<button type="button" class="btn primary big" data-act="new-game">+ Nowa gra</button>
@@ -1082,6 +1108,23 @@ function seedGames(){
   render(); toast('Wczytano ' + GAMES_SEED.length + ' pozycji. Bez opisu: ' + GAMES_SEED.filter(x => !x[2] && !x[3]).length + '.');
 }
 
+/* ---------- Instrukcja ---------- */
+function helpHtml(){
+  const sec = (q, body, open) => `<details class="help"${open ? ' open' : ''}><summary>${q}</summary><div>${body}</div></details>`;
+  return `<h2>Instrukcja</h2><p>Pulpit MC służy do dwóch rzeczy: szybko przygotować plan spotkania i poprowadzić je z telefonu.</p>
+  ${sec('Jak przygotować spotkanie?', `<ol><li>Wybierz zakładkę (Beloved, Source Youth albo SUM) i dotknij „+ Nowe spotkanie”.</li><li>W „Na bazie” wybierz szablon MC albo skopiuj plan z poprzedniego spotkania.</li><li>Dotknij punktu, żeby go otworzyć. Wpisz, kto prowadzi, ile trwa, co mówisz („Do powiedzenia”) i przypomnienie tylko dla siebie („Uwaga dla MC”).</li><li>Kolejność zmienisz, przeciągając za ⠿ albo strzałkami. Punkt, który może wrócić, lepiej ukryć niż usuwać.</li><li>„Pokaż luki” zaznacza punkty bez prowadzącego albo bez notatki.</li></ol><p>Wszystko zapisuje się samo.</p>`, true)}
+  ${sec('Jak prowadzić ze sceny?', `<ul><li>„Scena” otwiera plan od początku, a „▶ Scena od tego punktu” od wybranego miejsca.</li><li>„Dalej” albo przesunięcie palcem w lewo to następny punkt, ‹ to poprzedni. Nazwa następnego punktu jest na przycisku „Dalej”, a poprzedniego w szarej linii „było”.</li><li>☰ w lewym górnym rogu pokazuje cały plan. Dotknij punktu, żeby tam przejść.</li><li>A− i A+ zmieniają wielkość tekstu.</li><li>Żeby wyjść, przytrzymaj „Wyjdź”.</li><li>Pomarańczowa kropka przy zegarze oznacza, że ekran może zgasnąć. Ustaw w telefonie dłuższą autoblokadę.</li></ul>`)}
+  ${sec('Jak dać plan komuś, kto nie ma konta?', `<p>W spotkaniu dotknij „Wyślij link sceny” i wyślij link. Otworzy się w każdej przeglądarce, bez logowania. To kopia planu z tej chwili: po zmianach wyślij nowy link.</p>`)}
+  ${sec('Jak korzystać z bazy gier?', `<ul><li>Zakładka „Baza”: szukaj po nazwie i opisie, filtruj po kategorii i energii, a „🎲 Losuj” podsunie grę, której dawno nie było.</li><li>W planie otwórz punkt i dotknij „🎳 Wstaw grę”. Czas, zasady i link trafią do planu.</li><li>Czerwony znacznik „była DD.MM” oznacza, że gra była w ostatnich 3 tygodniach.</li><li>Dopisuj zasady, miejsce i sprzęt. „Brak opisu” pokazuje, czego jeszcze brakuje.</li></ul>`)}
+  ${canAnn() ? sec('Jak działają ogłoszenia?', `<p>W „Baza → Ogłoszenia” wpisz ogłoszenie raz, z datą ważności i grupą. W planie dotknij „📣 Wstaw ogłoszenie”, a zobaczysz tylko te aktualne w dniu spotkania.</p>`) : ''}
+  ${sec('Jak zaplanować zjazd SUM?', `<p>W zakładce SUM dodaj zjazd, uzupełnij daty i zespół MC, a potem dodawaj sesje. Każda sesja ma własny plan i swoje „MC sesji”.</p>`)}
+  ${sec('Co, jeśli coś usunę albo zepsuję?', `<ul><li>„Cofnij” na górze odwraca ostatnie zmiany.</li><li>„Kosz elementów” i „Historia wersji” są na dole spotkania.</li><li>Usunięte spotkania leżą w koszu na stronie głównej przez 30 dni.</li></ul>`)}
+  ${sec('Czy działa bez internetu?', `<p>Tak, jeśli plan był wcześniej otwarty na tym telefonie. Zmiany wyślą się, gdy wróci sieć. Na wszelki wypadek „Pobierz na telefon” zapisze plik, który działa całkiem bez sieci.</p>`)}
+  ${sec('Jak dodać ikonę na ekran telefonu?', `<p>iPhone: otwórz stronę w Safari, dotknij „Udostępnij” i wybierz „Do ekranu początkowego”. Android: w Chrome menu ⋮ i „Dodaj do ekranu głównego”. Nie wylogowuj się na swoim telefonie, wtedy plan działa też bez sieci.</p>`)}
+  ${IS_ADMIN ? sec('Dla administratora: kto co widzi?', `<ul><li>Konto → „Osoby z dostępem”: dodaj Gmail i imię. Bez tego nikt się nie zaloguje.</li><li>Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie spotkania tej zakładki, także przyszłe.</li><li>Bez zaznaczeń osoba widzi tylko spotkania, do których dodasz ją w spotkaniu przyciskiem „Kto widzi”. Przy SUM zrób to w zjeździe, to obejmie wszystkie jego sesje.</li><li>„Ogłoszenia” zaznaczasz osobno. Bazę gier widzą wszyscy.</li><li>Raz w miesiącu pobierz „Kopię zapasową” z dołu strony głównej.</li></ul>`) : ''}
+  <div class="row"><button type="button" class="btn primary" data-act="sheet-close">Zamknij</button></div>`;
+}
+
 /* ---------- Logowanie i dostęp ---------- */
 function authHtml(){
   const denied = S.mode === 'denied';
@@ -1095,11 +1138,23 @@ function authHtml(){
         <button type="button" class="btn big" data-act="login-retry">Spróbuj ponownie</button>` : ''}`}
   </div></main>`;
 }
+function accessSummary(p){
+  const ini = (p.inits || []).filter(k => INIT[k]).map(k => INIT[k].name);
+  return (ini.length ? 'Widzi wszystko w: ' + ini.join(', ') + '. ' : 'Widzi tylko spotkania dodane w „Kto widzi”. ') + (p.ann ? 'Ma ogłoszenia.' : 'Bez ogłoszeń.');
+}
+function setAccess(em, k, on){
+  const p = S.people[em] || {}; let patch;
+  if (k === 'ann') patch = { ann: on };
+  else patch = { inits: on ? uniq([...(p.inits || []), k]) : (p.inits || []).filter(x => x !== k) };
+  Object.assign(p, patch); S.people[em] = p;
+  F.setDoc(F.doc(FDB, 'allow', em), patch, { merge: true }).catch(writeErr);
+  const sm = document.querySelector(`[data-em="${CSS.escape(em)}"] .people-sum`); if (sm) sm.textContent = accessSummary(p);
+}
 function addPerson(){
   const name = $('#p-name').value.trim(), em = $('#p-email').value.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) { toast('Wpisz poprawny adres e-mail.'); $('#p-email').focus(); return; }
-  F.setDoc(F.doc(FDB, 'allow', em), { name, addedAt: Date.now() }).catch(writeErr);
-  toast('Dodano: ' + (name || em) + '. Teraz dodaj tę osobę do spotkań przyciskiem „Kto widzi”.');
+  F.setDoc(F.doc(FDB, 'allow', em), { name, addedAt: Date.now(), inits: [], ann: false }, { merge: true }).catch(writeErr);
+  toast('Dodano: ' + (name || em) + '. Zaznacz poniżej zakładki albo dodaj osobę do spotkań przyciskiem „Kto widzi”.');
   $('#p-name').value = ''; $('#p-email').value = '';
 }
 function setMember(kind, id, em, on){
@@ -1236,6 +1291,7 @@ document.addEventListener('click', e => {
     case 'del-ann': { const n = S.ann[S.sheet.aid]; n.deletedAt = Date.now(); persist('ann', n.id); S.sheet = null; render(); toast('Ogłoszenie przeniesione do kosza.', 'Cofnij', () => { n.deletedAt = null; persist('ann', n.id); render(); }); break; }
     case 'insert-ann': S.sheet = { type: 'ann-pick', itemId: r.item.id }; render(); break;
     case 'pick-ann': insertAnn(S.ann[a.dataset.aid]); break;
+    case 'help': S.sheet = { type: 'help' }; render(); break;
     case 'login': login(); break;
     case 'login-retry': S.loggingIn = false; S.loginSlow = false; login(); break;
     case 'logout': logout(); break;
@@ -1296,6 +1352,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) {
 document.addEventListener('change', e => {
   const t = e.target;
   if (t.dataset.ainit && S.sheet && S.sheet.aid) { const n = S.ann[S.sheet.aid]; n.inits = t.checked ? uniq([...(n.inits || []), t.dataset.ainit]) : (n.inits || []).filter(k => k !== t.dataset.ainit); persist('ann', n.id); }
+  if (t.dataset.pacc) { const li = t.closest('[data-em]'); if (li) setAccess(li.dataset.em, t.dataset.pacc, t.checked); }
   if (t.dataset.member !== undefined && S.sheet && S.sheet.type === 'members') setMember(S.sheet.kind, S.sheet.oid, t.dataset.member, t.checked);
   if (t.id === 'import-file' && t.files && t.files[0]) { importBackup(t.files[0]); t.value = ''; }
 });
@@ -1367,18 +1424,21 @@ async function init(){
 async function onUser(u){
   if (u && ME && ME.uid === u.uid) return;
   unsubs.splice(0).forEach(f => f());
-  S.meetings = {}; S.zjazdy = {}; S.games = {}; S.ann = {}; S.people = {}; S.loaded = false; S.view = 'home'; S.openId = null; S.sheet = null;
+  S.meetings = {}; S.zjazdy = {}; S.games = {}; S.ann = {}; S.people = {}; S.access = null; for (const k in SRC) delete SRC[k]; S.loaded = false; S.view = 'home'; S.openId = null; S.sheet = null;
   if (!u) { ME = null; IS_ADMIN = false; S.mode = 'auth'; render(); return; }
   ME = { uid: u.uid, email: String(u.email || '').toLowerCase(), name: u.displayName || '' };
   loadCache();
   S.mode = 'loading'; render();
-  const exists = async (col, id) => { try { return (await F.getDoc(F.doc(FDB, col, id))).exists(); } catch (e) { return e && e.code === 'permission-denied' ? false : null; } };
-  const [adm, allow] = await Promise.all([exists('admins', ME.email), exists('allow', ME.email)]);
+  const read = async (col, id) => { try { const d = await F.getDoc(F.doc(FDB, col, id)); return d.exists() ? (d.data() || {}) : false; } catch (e) { return e && e.code === 'permission-denied' ? false : null; } };
+  const [adm, allow] = await Promise.all([read('admins', ME.email), read('allow', ME.email)]);
   if (!ME || ME.uid !== u.uid) return;
-  IS_ADMIN = adm === true;
+  IS_ADMIN = !!adm;
   if (!IS_ADMIN && allow === false) { S.mode = 'denied'; render(); return; }
+  const accKey = 'mc-access-' + ME.uid;
+  if (allow) lsSet(accKey, JSON.stringify(allow));
+  try { S.access = allow || JSON.parse(lsGet(accKey) || 'null') || {}; } catch (e) { S.access = {}; }
   S.mode = 'db'; setSync('loading');
-  subscribe('meetings'); subscribe('zjazdy'); subscribe('games'); subscribe('ann');
+  subscribe('meetings'); subscribe('zjazdy'); subscribe('games'); if (canAnn()) subscribe('ann');
   if (IS_ADMIN) subscribePeople();
   render();
 }

@@ -28,6 +28,15 @@ service cloud.firestore {
       allow read: if isAdmin() || (signedIn() && me() == email);
       allow write: if isAdmin();
     }
+    match /requests/{email} {
+      // Prośba o dostęp: każdy zalogowany może zostawić jedną, pod własnym adresem.
+      allow read: if isAdmin() || (signedIn() && me() == email);
+      allow create, update: if signedIn() && me() == email
+        && request.resource.data.keys().hasOnly(['name', 'note', 'createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60
+        && request.resource.data.note is string && request.resource.data.note.size() <= 500;
+      allow delete: if isAdmin() || (signedIn() && me() == email);
+    }
     match /zjazdy/{id} {
       allow read: if isAdmin() || (allowed() && (hasInit('sum') || isMember(resource.data)));
       allow create: if isAdmin() || (allowed() && (hasInit('sum') || request.resource.data.members == [me()]));

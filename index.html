@@ -193,6 +193,10 @@ details.help p{color:var(--ink);margin:6px 0 0}
 .people>li{display:flex;flex-direction:column;gap:var(--s2);padding:var(--s3);border:1px solid var(--line);border-radius:var(--r)}
 .people-h{display:flex;justify-content:space-between;align-items:center;gap:var(--s2);flex-wrap:wrap}
 .people small{display:block;color:var(--ink-2)}
+.req-note{margin:0;color:var(--ink);font-style:italic;overflow-wrap:anywhere;white-space:pre-wrap}
+.avatar{position:relative}
+.avatar.has-badge::after{content:"";position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:var(--danger);border:2px solid var(--bg)}
+.auth-card .fld textarea{overflow:auto}
 .tab{padding:0 4px;line-height:1.15}
 .sheet .sp{flex:1}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -665,7 +669,7 @@ function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight 
 
 function homeHtml(){
   const tabs = `<nav class="tabs" role="tablist" aria-label="Inicjatywy">${['beloved','source','sum','base'].map(k => `<button type="button" role="tab" aria-selected="${S.tab === k}" class="tab" data-act="tab" data-k="${k}">${k === 'base' ? 'Baza' : INIT[k].name}</button>`).join('')}</nav>`;
-  return `<header class="bar"><h1 class="brand">Pulpit MC</h1><span class="sp"></span>${syncHtml()}<button type="button" class="avatar help-b" data-act="help" aria-label="Instrukcja">?</button>${ME ? `<button type="button" class="avatar" data-act="account" aria-label="Konto: ${esc(ME.email)}">${esc((ME.name || ME.email).trim().charAt(0).toUpperCase())}</button>` : ''}</header>
+  return `<header class="bar"><h1 class="brand">Pulpit MC</h1><span class="sp"></span>${syncHtml()}<button type="button" class="avatar help-b" data-act="help" aria-label="Instrukcja">?</button>${ME ? `<button type="button" class="avatar${Object.keys(S.requests || {}).length ? ' has-badge' : ''}" data-act="account" aria-label="Konto: ${esc(ME.email)}">${esc((ME.name || ME.email).trim().charAt(0).toUpperCase())}</button>` : ''}</header>
   <main class="wrap">${tabs}${S.tab === 'base' ? baseHtml() : S.tab === 'sum' ? sumHtml() : listHtml(INIT[S.tab] ? S.tab : 'beloved')}${homeTrashHtml()}
     ${IS_ADMIN || S.mode === 'local' ? '<div class="foot-tools"><button type="button" class="btn ghost sm" data-act="backup">Kopia zapasowa wszystkich danych (JSON)</button></div>' : ''}
   </main>`;
@@ -901,14 +905,14 @@ function sheetHtml(){
   else if (s.type === 'ann-pick') inner = annPickHtml();
   else if (s.type === 'account') {
     inner = `<h2>Konto</h2><p>Zalogowano jako <b>${esc(ME ? ME.email : '')}</b>${IS_ADMIN ? ' (administrator)' : ''}.</p>
-      ${IS_ADMIN ? `<div class="row" style="justify-content:flex-start"><button type="button" class="btn" data-act="people">Osoby z dostępem (${Object.keys(S.people).length})</button>
+      ${IS_ADMIN ? `<div class="row" style="justify-content:flex-start"><button type="button" class="btn${Object.keys(S.requests || {}).length ? ' primary' : ''}" data-act="people">Osoby z dostępem (${Object.keys(S.people).length})${Object.keys(S.requests || {}).length ? ' · prośby: ' + Object.keys(S.requests).length : ''}</button>
         <button type="button" class="btn" data-act="import">Wczytaj kopię (JSON)</button></div>` : ''}
       <div class="row" style="justify-content:flex-start"><button type="button" class="btn" data-act="help">Instrukcja</button></div>
       <p>Wylogowanie usuwa z tego urządzenia zapisane plany. Na swoim telefonie zostań zalogowany, żeby plan działał też bez internetu.</p>
       <div class="row"><button type="button" class="btn ghost" data-act="sheet-close">Zamknij</button><button type="button" class="btn danger-ghost" data-act="logout">Wyloguj</button></div>`;
   } else if (s.type === 'people') {
     const ps = Object.entries(S.people).sort((a, b) => (a[1].name || a[0]).localeCompare(b[1].name || b[0], 'pl'));
-    inner = `<h2>Osoby z dostępem</h2><p>Tylko te adresy Gmail mogą się zalogować. Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie jej spotkania, także przyszłe. Bez zaznaczenia widzi tylko spotkania, do których dodasz ją przyciskiem „Kto widzi”. Bazę gier widzą wszyscy, ogłoszenia tylko zaznaczeni. Zmiany działają po odświeżeniu strony u tej osoby.</p>
+    inner = `<h2>Osoby z dostępem</h2>${requestsHtml()}<p>Tylko te adresy Gmail mogą się zalogować. Zaznacz „wszystko” przy zakładce, a osoba zobaczy wszystkie jej spotkania, także przyszłe. Bez zaznaczenia widzi tylko spotkania, do których dodasz ją przyciskiem „Kto widzi”. Bazę gier widzą wszyscy, ogłoszenia tylko zaznaczeni. Zmiany działają po odświeżeniu strony u tej osoby.</p>
       ${ps.length ? `<ul class="people">${ps.map(([em, p]) => `<li data-em="${esc(em)}"><div class="people-h"><div>${esc(p.name || em)}<small>${esc(em)}</small></div>
         <button type="button" class="btn sm danger-ghost" data-act="del-person">${S.confirm === em ? 'Na pewno? Odbierz' : 'Odbierz dostęp'}</button></div>
         <div class="chips" role="group" aria-label="Uprawnienia: ${esc(p.name || em)}">${Object.entries(INIT).map(([k, v]) => `<label class="chip"><input type="checkbox" data-pacc="${k}"${(p.inits || []).includes(k) ? ' checked' : ''}> ${v.name}: wszystko</label>`).join('')}
@@ -1130,13 +1134,53 @@ function authHtml(){
   const denied = S.mode === 'denied';
   return `<main class="auth"><div class="auth-card">
     <h1 class="brand">Pulpit MC</h1>
-    ${denied ? `<p>Konto <b>${esc(ME ? ME.email : '')}</b> nie ma dostępu. Poproś Tymka, żeby dodał ten adres, albo zaloguj się innym kontem.</p>
-      <button type="button" class="btn big" data-act="logout">Wyloguj i wybierz inne konto</button>`
+    ${denied ? (S.myReq ? `<p>Prośba o dostęp dla <b>${esc(ME ? ME.email : '')}</b> czeka na Tymka (wysłana ${fmtStamp(S.myReq.createdAt)}). Gdy ją przyjmie, ta strona sama się otworzy.</p>
+      <p class="req-note">„${esc(S.myReq.note || '')}”</p>
+      <button type="button" class="btn big" data-act="req-cancel">Wycofaj prośbę</button>
+      <button type="button" class="btn ghost big" data-act="logout">Wyloguj i wybierz inne konto</button>`
+    : `<p>Konto <b>${esc(ME ? ME.email : '')}</b> nie ma jeszcze dostępu. Możesz poprosić o niego tutaj.</p>
+      <label class="fld"><span>Kim jesteś i po co Ci dostęp?</span><textarea id="req-note" rows="2" maxlength="300" placeholder="np. Jestem MC na Beloved"></textarea></label>
+      <button type="button" class="btn primary big" data-act="req-send">Poproś o dostęp</button>
+      <button type="button" class="btn ghost big" data-act="logout">Wyloguj i wybierz inne konto</button>`)
     : `<p>Plany i notatki MC dla Beloved, Source Youth i SUM. Dostęp mają tylko osoby dodane przez Tymka.</p>
       <button type="button" class="btn primary big" data-act="login"${S.loggingIn ? ' disabled' : ''}>${S.loggingIn ? 'Loguję…' : 'Zaloguj się kontem Google'}</button>
       ${S.loginSlow ? `<p>Logowanie trwa długo? Jeśli okno Google się zamknęło, a tu nic się nie dzieje, dotknij poniżej. Na iPhonie z ikony na ekranie pomaga też całkowite zamknięcie aplikacji i otwarcie jej jeszcze raz.</p>
         <button type="button" class="btn big" data-act="login-retry">Spróbuj ponownie</button>` : ''}`}
   </div></main>`;
+}
+/* ---------- Prośby o dostęp ---------- */
+function watchMyRequest(uid){
+  // Czeka na decyzję: gdy pojawi się wpis w allow, strona przeładowuje się i wpuszcza.
+  unsubs.push(F.onSnapshot(F.doc(FDB, 'requests', ME.email), d => { if (!ME || ME.uid !== uid) return; S.myReq = d.exists() ? d.data() : null; if (S.mode === 'denied') render(); }, () => {}));
+  unsubs.push(F.onSnapshot(F.doc(FDB, 'allow', ME.email), d => { if (d.exists()) location.reload(); }, () => {}));
+}
+function sendRequest(){
+  const name = ((ME && ME.name) || '').split(' ')[0].slice(0, 60), note = $('#req-note').value.trim().slice(0, 300);
+  if (note.length < 3) { toast('Napisz kilka słów, kim jesteś.'); $('#req-note').focus(); return; }
+  F.setDoc(F.doc(FDB, 'requests', ME.email), { name, note, createdAt: Date.now() }).then(() => toast('Prośba wysłana.'), writeErr);
+}
+function subscribeRequests(){
+  unsubs.push(F.onSnapshot(F.collection(FDB, 'requests'), snap => {
+    S.requests = {}; snap.docs.forEach(d => { S.requests[d.id] = d.data(); });
+    document.querySelectorAll('.avatar[data-act=account]').forEach(b => b.classList.toggle('has-badge', Object.keys(S.requests).length > 0));
+    if (S.sheet && (S.sheet.type === 'people' || S.sheet.type === 'account')) softRender();
+    else if (S.view === 'home') softRender();
+  }, () => {}));
+}
+function requestsHtml(){
+  const rs = Object.entries(S.requests || {}).sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+  if (!rs.length) return '';
+  return `<h3 class="sec">Prośby o dostęp (${rs.length})</h3><ul class="people">${rs.map(([em, r]) => `<li data-rq="${esc(em)}"><div><b>${esc(r.name || em)}</b><small>${r.name ? esc(em) + ' · ' : ''}${r.createdAt ? 'wysłana ' + fmtStamp(r.createdAt) : ''}</small></div>
+    ${r.note ? `<p class="req-note">„${esc(r.note)}”</p>` : ''}
+    <div class="row" style="justify-content:flex-start"><button type="button" class="btn sm primary" data-act="req-accept">Przyjmij</button><button type="button" class="btn sm danger-ghost" data-act="req-reject">${S.confirm === 'rq:' + em ? 'Na pewno? Odrzuć' : 'Odrzuć'}</button></div></li>`).join('')}</ul>`;
+}
+async function acceptRequest(em){
+  const r = (S.requests || {})[em] || {};
+  try {
+    await F.setDoc(F.doc(FDB, 'allow', em), { name: r.name || '', addedAt: Date.now(), inits: [], ann: false }, { merge: true });
+    await F.deleteDoc(F.doc(FDB, 'requests', em));
+    toast('Przyjęto: ' + (r.name || em) + '. Zaznacz poniżej, co ma widzieć.');
+  } catch (e) { writeErr(e); }
 }
 function accessSummary(p){
   const ini = (p.inits || []).filter(k => INIT[k]).map(k => INIT[k].name);
@@ -1292,6 +1336,10 @@ document.addEventListener('click', e => {
     case 'insert-ann': S.sheet = { type: 'ann-pick', itemId: r.item.id }; render(); break;
     case 'pick-ann': insertAnn(S.ann[a.dataset.aid]); break;
     case 'help': S.sheet = { type: 'help' }; render(); break;
+    case 'req-send': sendRequest(); break;
+    case 'req-cancel': F.deleteDoc(F.doc(FDB, 'requests', ME.email)).catch(writeErr); break;
+    case 'req-accept': acceptRequest(a.closest('[data-rq]').dataset.rq); break;
+    case 'req-reject': { const em = a.closest('[data-rq]').dataset.rq; if (S.confirm !== 'rq:' + em) { S.confirm = 'rq:' + em; render(); break; } S.confirm = null; F.deleteDoc(F.doc(FDB, 'requests', em)).then(() => toast('Odrzucono prośbę.'), writeErr); break; }
     case 'login': login(); break;
     case 'login-retry': S.loggingIn = false; S.loginSlow = false; login(); break;
     case 'logout': logout(); break;
@@ -1424,7 +1472,7 @@ async function init(){
 async function onUser(u){
   if (u && ME && ME.uid === u.uid) return;
   unsubs.splice(0).forEach(f => f());
-  S.meetings = {}; S.zjazdy = {}; S.games = {}; S.ann = {}; S.people = {}; S.access = null; for (const k in SRC) delete SRC[k]; S.loaded = false; S.view = 'home'; S.openId = null; S.sheet = null;
+  S.meetings = {}; S.zjazdy = {}; S.games = {}; S.ann = {}; S.people = {}; S.requests = {}; S.myReq = null; S.access = null; for (const k in SRC) delete SRC[k]; S.loaded = false; S.view = 'home'; S.openId = null; S.sheet = null;
   if (!u) { ME = null; IS_ADMIN = false; S.mode = 'auth'; render(); return; }
   ME = { uid: u.uid, email: String(u.email || '').toLowerCase(), name: u.displayName || '' };
   loadCache();
@@ -1433,13 +1481,13 @@ async function onUser(u){
   const [adm, allow] = await Promise.all([read('admins', ME.email), read('allow', ME.email)]);
   if (!ME || ME.uid !== u.uid) return;
   IS_ADMIN = !!adm;
-  if (!IS_ADMIN && allow === false) { S.mode = 'denied'; render(); return; }
+  if (!IS_ADMIN && allow === false) { S.mode = 'denied'; watchMyRequest(u.uid); render(); return; }
   const accKey = 'mc-access-' + ME.uid;
   if (allow) lsSet(accKey, JSON.stringify(allow));
   try { S.access = allow || JSON.parse(lsGet(accKey) || 'null') || {}; } catch (e) { S.access = {}; }
   S.mode = 'db'; setSync('loading');
   subscribe('meetings'); subscribe('zjazdy'); subscribe('games'); if (canAnn()) subscribe('ann');
-  if (IS_ADMIN) subscribePeople();
+  if (IS_ADMIN) { subscribePeople(); subscribeRequests(); }
   render();
 }
 let loginT = null;

@@ -20,7 +20,7 @@
 /* Układ: jedna kolumna (max 760 px), karty spotkań i bloków planu; scena to osobna, zawsze ciemna nakładka. */
 :root{
   --bg:#f4f5f7; --surface:#ffffff; --surface-2:#eceef2; --line:#dde1e8;
-  --ink:#151820; --ink-2:#5b6271; --accent:#1f5fbf; --accent-ink:#ffffff; --accent-soft:#e2ebf8;
+  --ink:#151820; --ink-2:#5b6271; --accent:#1f5fbf; --accent-ink:#ffffff; --accent-soft:#e2ebf8; --tx-note:#3a6db0;
   --danger:#b42318; --ok:#1f7a4d; --warn:#9a5b00;
   --font-ui:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --font-display:"Bricolage Grotesque","Atkinson Hyperlegible",system-ui,sans-serif;
@@ -28,11 +28,11 @@
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f1115; --surface:#171a21; --surface-2:#1e222b; --line:#2a2f3a;
-  --ink:#eef0f4; --ink-2:#9aa2b1; --accent:#5b9cf5; --accent-ink:#06142b; --accent-soft:#142235;
+  --ink:#eef0f4; --ink-2:#9aa2b1; --accent:#5b9cf5; --accent-ink:#06142b; --accent-soft:#142235; --tx-note:#93b9ee;
   --danger:#ff8a7a; --ok:#5fd39a; --warn:#f0a640; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1115; --surface:#171a21; --surface-2:#1e222b; --line:#2a2f3a;
-  --ink:#eef0f4; --ink-2:#9aa2b1; --accent:#5b9cf5; --accent-ink:#06142b; --accent-soft:#142235;
+  --ink:#eef0f4; --ink-2:#9aa2b1; --accent:#5b9cf5; --accent-ink:#06142b; --accent-soft:#142235; --tx-note:#93b9ee;
   --danger:#ff8a7a; --ok:#5fd39a; --warn:#f0a640; color-scheme:dark}
 
 [hidden]{display:none!important}
@@ -151,7 +151,26 @@ body.is-dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
 .gaps{grid-column:1 / -1;display:flex;gap:6px;flex-wrap:wrap}
 .tag.gap{background:var(--accent-soft);color:var(--accent)}
 .item.is-gap{border-color:var(--accent);border-style:dashed}
-.list-tools{display:flex;justify-content:flex-end;margin-bottom:calc(var(--s2) * -1)}
+.list-tools{display:flex;justify-content:flex-end;align-items:center;gap:var(--s2);margin-bottom:calc(var(--s2) * -1)}
+.list-tools .sp{flex:1}
+.seg{display:inline-flex;padding:3px;gap:3px;border-radius:12px;background:var(--surface-2)}
+.seg .btn{border-color:transparent;background:transparent;min-height:36px}
+.seg .btn.on{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.tx-wrap{display:flex;flex-direction:column;gap:var(--s2)}
+.tx-legend{margin:0;display:flex;flex-wrap:wrap;gap:6px;font-size:13px;color:var(--ink-2)}
+.tx-legend code{font-family:inherit;padding:2px 8px;border-radius:999px;background:var(--surface-2);white-space:nowrap}
+.tx-box{position:relative;border-radius:var(--r);background:var(--surface)}
+.tx,.tx-hl{width:100%;margin:0;padding:var(--s4);border:1px solid var(--line);border-radius:var(--r);font-family:inherit;font-size:17px;font-weight:400;line-height:1.55;letter-spacing:0;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;tab-size:2}
+.tx-hl{position:absolute;inset:0;overflow:hidden;pointer-events:none;color:var(--ink);border-color:transparent}
+.tx{position:relative;display:block;min-height:60vh;background:transparent;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--ink);resize:none}
+.tx::placeholder{color:var(--ink-2);-webkit-text-fill-color:var(--ink-2)}
+.tx::selection{background:var(--accent-soft)}
+.h-b,.h-d{color:var(--accent)}
+.h-m,.h-s{color:var(--ink-2)}
+.h-n{color:var(--tx-note)}
+.h-x{text-decoration:line-through;color:var(--ink-2)}
+.tx:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+.tx-sum{margin:0;display:flex;justify-content:space-between;gap:var(--s2);flex-wrap:wrap;font-size:13px;color:var(--ink-2)}
 .btn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .foot-tools{display:flex;justify-content:center;gap:var(--s2);flex-wrap:wrap}
 .avatar{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface-2);font-weight:700;font-size:16px;cursor:pointer;flex:0 0 auto}
@@ -239,7 +258,7 @@ const STAGE_CSS = `
 .st-plan-it.sub{padding-left:20px}
 .st-plan-it.div{color:#a8aebb;text-transform:uppercase;letter-spacing:.06em;font-size:15px}
 .st-plan-it.done{opacity:.45}
-.st-plan-it.now{border-color:#6aa8ff;background:#1d1608}
+.st-plan-it.now{border-color:#6aa8ff;background:#0d1a2e}
 .st-plan-it small{display:block;color:#a8aebb;font-size:14px}
 .st-plan-t,.st-plan-m{color:#a8aebb;font-size:15px;font-variant-numeric:tabular-nums}
 .st-plan-back{margin:8px 12px 12px;min-height:64px;border-radius:14px;border:0;background:#6aa8ff;color:#06142b;font:inherit;font-size:20px;font-weight:700;cursor:pointer}
@@ -277,6 +296,29 @@ const STAGE_CSS = `
 .st-prev:disabled,.st-next:disabled{opacity:.3;cursor:default}
 .st button:focus-visible{outline:3px solid #fff;outline-offset:2px}
 .st-msg{position:absolute;left:12px;right:12px;bottom:calc(110px + env(safe-area-inset-bottom,0px));background:#1a1d24;color:#fff;border:1px solid #2b2f38;border-radius:12px;padding:12px 14px;font-size:16px;text-align:center}
+.st-modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 12px 8px;padding:4px;border-radius:14px;background:#121419}
+.st-modes button{min-height:48px;border:0;border-radius:10px;background:none;color:#a8aebb;font:inherit;font-size:17px;font-weight:700;cursor:pointer}
+.st-modes button[aria-pressed="true"]{background:#6aa8ff;color:#06142b}
+.st-textmode .st-body{padding-bottom:45vh}
+.st-tx{font-size:calc(var(--fs) * .8);line-height:1.4}
+.st-tx-head{padding-bottom:8px}
+.st-tx-title{font-size:calc(var(--fs) * 1.05);margin:0 0 4px}
+.st-tx-blk{font-size:calc(var(--fs) * .6);letter-spacing:.06em;text-transform:uppercase;color:#6aa8ff;margin:28px 0 6px}
+.st-tx-it{padding:10px 12px;margin:0 -12px;border-left:4px solid transparent;border-radius:6px;scroll-margin-top:16px;cursor:pointer}
+.st-tx-solo{margin-top:22px}
+.st-tx-solo .st-tx-name b{color:#6aa8ff;text-transform:uppercase;letter-spacing:.05em;font-size:.8em}
+.st-tx-it.now{border-left-color:#6aa8ff;background:#0d1a2e}
+.st-tx-it.done{opacity:.4}
+.st-tx-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.st-tx-name b{font-weight:700}
+.st-tx-lead{font-size:.7em;font-weight:700;padding:2px 10px;border-radius:999px;background:#6aa8ff;color:#06142b}
+.st-tx-min{font-size:.7em;color:#a8aebb;font-variant-numeric:tabular-nums}
+.st-tx-meta{display:inline-flex;gap:10px;align-items:baseline;margin-left:10px}
+.st-tx-say{margin-top:4px;white-space:pre-wrap;overflow-wrap:anywhere}
+.st-tx-note{margin-top:4px;font-size:.85em;color:#9cc4ff;white-space:pre-wrap;overflow-wrap:anywhere}
+.st-tx-div{margin-top:28px;text-align:center;color:#6aa8ff;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.st-tx-end{margin-top:28px;padding:10px 0;color:#7d8494;text-align:center;scroll-margin-top:16px}
+.st-tx-head.now,.st-tx-end.now{opacity:1}
 @media (prefers-reduced-motion:reduce){.st-exit.holding::before,.st-prog i{transition:none}}
 `;
 
@@ -308,6 +350,9 @@ function mountStage(root, meeting, opts){
   var idx = 0;
   if (opts.startId) { for (var q = 0; q < slides.length; q++) { if (slides[q].id === opts.startId || slides[q].blockId === opts.startId) { idx = q; break; } } }
   var slideStart = Date.now(), lock = null, wakeOn = null, msgT = null, holdT = null, tick = null;
+  var mode = opts.mode;
+  if (mode !== 'text' && mode !== 'slide') { try { mode = localStorage.getItem('mc-stage-mode'); } catch (e) {} }
+  if (mode !== 'text') mode = 'slide';
 
   root.innerHTML =
     '<div class="st" style="--fs:' + fs + 'px" role="application" aria-label="Widok sceniczny">' +
@@ -322,7 +367,8 @@ function mountStage(root, meeting, opts){
       '</div>' +
       '<div class="st-prog"><i></i></div>' +
       '<div class="st-body"></div>' +
-      '<div class="st-plan" hidden role="dialog" aria-label="Cały plan"><div class="st-plan-h"><b>Cały plan</b><span class="st-plan-late"></span></div><ol class="st-plan-list"></ol>' +
+      '<div class="st-plan" hidden role="dialog" aria-label="Cały plan"><div class="st-plan-h"><b>Cały plan</b><span class="st-plan-late"></span></div>' +
+        '<div class="st-modes" role="group" aria-label="Widok sceny"><button type="button" data-m="slide">Jeden punkt</button><button type="button" data-m="text">Cały tekst</button></div><ol class="st-plan-list"></ol>' +
         '<button class="st-plan-back" type="button">Wróć do bieżącego punktu</button></div>' +
       '<div class="st-nav">' +
         '<button class="st-prev" type="button" aria-label="Poprzedni punkt">‹</button>' +
@@ -360,10 +406,35 @@ function mountStage(root, meeting, opts){
       (s.note ? '<div class="st-note"><b>Dla Ciebie</b>' + esc(s.note) + '</div>' : '');
   }
 
-  function show(){
+  function textHtml(){
+    var h = '<div class="st-tx">', lastBlock = null;
+    slides.forEach(function(s, i){
+      if (s.t === 'start') { h += '<div class="st-tx-head" data-i="' + i + '"><div class="st-eyebrow">' + esc(meeting.initiativeName || '') + (meeting.date ? ' · ' + esc(meeting.date.split('-').reverse().join('.')) : '') + (meeting.start ? ' · start ' + esc(meeting.start) : '') + '</div><h1 class="st-tx-title">' + esc(meeting.title || 'Spotkanie') + '</h1>' + (meeting.mc ? '<div class="st-sub">MC: ' + esc(meeting.mc) + '</div>' : '') + (opts.exported ? '<div class="st-sub">Kopia z ' + esc(opts.exported) + '</div>' : '') + '</div>'; return; }
+      if (s.t === 'end') { h += '<div class="st-tx-end" data-i="' + i + '">Koniec planu</div>'; return; }
+      if (s.blockId && s.blockId !== lastBlock) h += '<h2 class="st-tx-blk">' + esc(s.block || '') + '</h2>';
+      lastBlock = s.blockId || s.id;
+      var meta = (s.leader ? '<span class="st-tx-lead">' + esc(s.leader) + '</span>' : '') + (s.minutes ? '<span class="st-tx-min">' + s.minutes + ' min</span>' : '');
+      if (s.t === 'div') { h += '<div class="st-tx-it st-tx-div" data-i="' + i + '"><span>' + esc(s.title || '') + '</span>' + (meta ? '<span class="st-tx-meta">' + meta + '</span>' : '') + '</div>'; return; }
+      h += '<div class="st-tx-it' + (s.blockId ? '' : ' st-tx-solo') + '" data-i="' + i + '"><div class="st-tx-name"><b>' + esc(s.title || 'Bez nazwy') + '</b>' + meta + '</div>' +
+        (s.say ? '<div class="st-tx-say">' + esc(s.say) + '</div>' : '') + (s.note ? '<div class="st-tx-note">' + esc(s.note) + '</div>' : '') + '</div>';
+    });
+    return h + '</div>';
+  }
+  function markText(scroll){
+    var its = body.querySelectorAll('[data-i]');
+    for (var k = 0; k < its.length; k++) { var n = Number(its[k].getAttribute('data-i')); its[k].classList.toggle('now', n === idx); its[k].classList.toggle('done', n < idx); }
+    if (scroll) { var c = body.querySelector('.now'); if (c) { var red = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; try { c.scrollIntoView({ block: 'start', behavior: red || scroll === 'jump' ? 'auto' : 'smooth' }); } catch (e) { c.scrollIntoView(true); } } }
+  }
+  function setMode(m){
+    mode = m; try { localStorage.setItem('mc-stage-mode', m); } catch (e) {}
+    el.classList.toggle('st-textmode', m === 'text');
+    var bs = el.querySelectorAll('.st-modes button'); for (var k = 0; k < bs.length; k++) bs[k].setAttribute('aria-pressed', String(bs[k].getAttribute('data-m') === m));
+    body.innerHTML = ''; show('jump');
+  }
+  function show(how){
     var s = slides[idx];
-    body.innerHTML = slideHtml(s);
-    body.scrollTop = 0;
+    if (mode === 'text') { if (!body.querySelector('.st-tx')) body.innerHTML = textHtml(); markText(how || true); }
+    else { body.innerHTML = slideHtml(s); body.scrollTop = 0; }
     countEl.textContent = (s.t === 'start' || s.t === 'end') ? 'Plan' : idx + '/' + (slides.length - 2);
     var pl = body.querySelector('.st-prevline'); if (pl) pl.addEventListener('click', function(){ go(-1); });
     prog.style.width = (idx / (slides.length - 1) * 100) + '%';
@@ -402,6 +473,8 @@ function mountStage(root, meeting, opts){
   function closePlan(){ planEl.hidden = true; }
   planBtn.addEventListener('click', function(){ planEl.hidden ? openPlan() : closePlan(); });
   el.querySelector('.st-plan-back').addEventListener('click', closePlan);
+  el.querySelector('.st-modes').addEventListener('click', function(e){ var b = e.target.closest('[data-m]'); if (!b) return; closePlan(); if (b.getAttribute('data-m') !== mode) setMode(b.getAttribute('data-m')); });
+  body.addEventListener('click', function(e){ if (mode !== 'text') return; var b = e.target.closest('[data-i]'); if (!b) return; var n = Number(b.getAttribute('data-i')); if (n !== idx) { record(); idx = n; show(); if (opts.onIndex) opts.onIndex(idx); } });
   planList.addEventListener('click', function(e){ var b = e.target.closest('[data-i]'); if (!b) return; var n = Number(b.dataset.i); closePlan(); if (n !== idx) { record(); idx = n; show(); if (opts.onIndex) opts.onIndex(idx); } });
   var times = {};
   function record(){ var s = slides[idx]; if (s && s.id) { var sec = Math.round((Date.now() - slideStart) / 1000); if (sec >= 3) times[s.id] = (times[s.id] || 0) + sec; } }
@@ -465,7 +538,9 @@ function mountStage(root, meeting, opts){
   }
   tick = setInterval(update, 1000);
   reqLock(false);
-  show();
+  el.classList.toggle('st-textmode', mode === 'text');
+  (function(){ var bs = el.querySelectorAll('.st-modes button'); for (var k = 0; k < bs.length; k++) bs[k].setAttribute('aria-pressed', String(bs[k].getAttribute('data-m') === mode)); })();
+  show('jump');
   return cleanup;
 }
 
@@ -508,10 +583,147 @@ function templateSum(){ return [
   B('Taniec', [], {minutes:5}),
   B('Zapowiedź nauczania', []),
 ]; }
+
+/* ---------- Plan jako tekst (alternatywny widok edycji, ten sam plan) ----------
+   # Blok - Imię, 10 min        blok
+   Punkt - Imię, 2 min          punkt w bloku (bez # przed pierwszym blokiem: samodzielny blok)
+   - tekst                      do powiedzenia
+   * tekst                      uwaga dla MC
+   --- Słowo / grupki ---       przerywnik
+   (ukryte) na początku nazwy   element ukryty na scenie */
+const TX_MIN = /^(\d+(?:[.,]\d+)?)\s*(?:min(?:ut[ay]?)?\.?|m|['’′])$/i;
+const TX_NAME = /^(?:[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}.'’-]*(?:\s+[\p{L}.'’-]+){0,2}|MC|mc|razem|wszyscy|nikt)$/u;
+const TX_HID = /^\(ukryt[eyao]\)\s*/i;
+function txMeta(str){
+  const parts = str.split(',').map(x => x.trim()).filter(Boolean);
+  if (!parts.length) return null;
+  let minutes = null; const who = [];
+  for (const part of parts) {
+    const t = part.match(TX_MIN);
+    if (t && minutes === null) minutes = Number(t[1].replace(',', '.'));
+    else if (part.length <= 40 && TX_NAME.test(part)) who.push(part);
+    else return null;
+  }
+  return { leader: who.join(', '), minutes };
+}
+function txHead(str){
+  let t = String(str || '').trim(), hidden = false;
+  if (TX_HID.test(t)) { hidden = true; t = t.replace(TX_HID, ''); }
+  const res = (title, leader, minutes) => ({ title: title === '(bez nazwy)' ? '' : title, leader: leader || '', minutes: minutes == null ? null : minutes, hidden });
+  const seps = [...t.matchAll(/\s+[-–]\s+/g)];
+  if (seps.length) {
+    const last = seps[seps.length - 1], meta = txMeta(t.slice(last.index + last[0].length));
+    if (meta) return res(t.slice(0, last.index).trim(), meta.leader, meta.minutes);
+  }
+  let c = t.match(/^(.*?)(?:,\s*|\s*\(\s*)(\d+(?:[.,]\d+)?)\s*(?:min(?:ut[ay]?)?\.?|m|['’′])\s*\)?$/i);
+  if (c && c[1].trim()) return res(c[1].trim(), '', Number(c[2].replace(',', '.')));
+  return res(t, '', null);
+}
+function txHeadOut(it){
+  let t = String(it.title || '').replace(/\s*\n\s*/g, ' ').trim() || '(bez nazwy)';
+  const probe = txHead(t);
+  if (probe.title !== t || probe.hidden) t = t.replace(/\s+[-–]\s+/g, ' — ').replace(TX_HID, '').replace(/,(\s*\d)/g, ';$1');
+  if (/^[#*•~]|^[-–—_]/.test(t)) t = '​' + t;
+  const meta = [String(it.leader || '').trim(), hasMin(it.minutes) ? num(it.minutes) + ' min' : ''].filter(Boolean).join(', ');
+  return (it.hidden ? '(ukryte) ' : '') + t + (meta ? ' - ' + meta : '');
+}
+function txBody(it){
+  let o = '';
+  if (it.say) o += it.say.split('\n').map(l => l.trim() ? '- ' + l : '-').join('\n') + '\n';
+  if (it.note) o += it.note.split('\n').map(l => l.trim() ? '* ' + l : '*').join('\n') + '\n';
+  return o;
+}
+function itemsToText(items){
+  const out = [];
+  (items || []).forEach(b => {
+    if (b.kind === 'divider') { out.push('\n--- ' + txHeadOut(b) + ' ---\n' + txBody(b)); return; }
+    let t = '\n# ' + txHeadOut(b) + '\n' + txBody(b);
+    (b.children || []).forEach(c => { t += txHeadOut(c) + '\n' + txBody(c); });
+    out.push(t);
+  });
+  return out.join('').replace(/^\n+/, '').replace(/\n+$/, '') + '\n';
+}
+function textToItems(text, old){
+  const out = []; let blk = null, last = null;
+  const mk = (kind, h) => ({ kind, title: h.title, leader: h.leader, minutes: h.minutes, hidden: h.hidden, say: '', note: '', children: [] });
+  const addTo = (key, val) => { last[key] = last[key] === '' ? val : last[key] + '\n' + val; };
+  String(text || '').replace(/\r/g, '').split('\n').forEach(raw => {
+    const line = raw.replace(/​/g, '').trim();
+    if (!line) return;
+    let mm;
+    if ((mm = line.match(/^[-–—_]{2,}\s*(.*?)\s*[-–—_]*$/))) {
+      if (!mm[1]) return;
+      last = mk('divider', txHead(mm[1])); out.push(last); blk = null; return;
+    }
+    if (line[0] === '#') { blk = mk('block', txHead(line.replace(/^#+\s*/, ''))); out.push(blk); last = blk; return; }
+    if (last && (mm = line.match(/^[-–—•]\s*(.*)$/))) { addTo('say', mm[1]); return; }
+    if (last && (mm = line.match(/^\*\s*(.*)$/))) { addTo('note', mm[1]); return; }
+    const h = txHead(line);
+    if (blk) { last = mk('point', h); blk.children.push(last); }
+    else { last = mk('block', h); out.push(last); }
+  });
+  // Te same elementy zachowują id i dodatkowe pola (gra z bazy, ogłoszenie), żeby nic nie ginęło.
+  const flat = []; (old || []).forEach(b => { flat.push(b); (b.children || []).forEach(c => flat.push(c)); });
+  const nflat = []; out.forEach(b => { nflat.push(b); b.children.forEach(c => nflat.push(c)); });
+  const used = new Set(), grp = it => it.kind === 'divider' ? 'd' : 'x';
+  nflat.forEach(n => { const o = flat.find(o => !used.has(o) && grp(o) === grp(n) && norm(o.title) === norm(n.title)); if (o) { used.add(o); n._o = o; } });
+  nflat.forEach((n, i) => { if (n._o) return; const o = flat[i]; if (o && !used.has(o) && grp(o) === grp(n)) { used.add(o); n._o = o; } });
+  const build = n => {
+    const o = n._o, it = o ? clone(o) : { id: rid() };
+    Object.assign(it, { kind: n.kind, title: n.title, leader: n.leader, minutes: n.minutes, say: n.say, note: n.note, hidden: n.hidden });
+    if (n.kind === 'point') delete it.children; else it.children = n.kind === 'block' ? n.children.map(build) : [];
+    return it;
+  };
+  return out.map(build);
+}
+function txSplit(t){
+  // Zwraca [nazwa, dopisek z imieniem i czasem] do kolorowania; ta sama logika co txHead.
+  const seps = [...t.matchAll(/\s+[-–]\s+/g)];
+  if (seps.length) { const l = seps[seps.length - 1]; if (txMeta(t.slice(l.index + l[0].length))) return [t.slice(0, l.index), t.slice(l.index)]; }
+  const c = t.match(/^(.*?)((?:,\s*|\s*\(\s*)\d+(?:[.,]\d+)?\s*(?:min(?:ut[ay]?)?\.?|m|['’′])\s*\)?)$/i);
+  if (c && c[1].trim()) return [c[1], c[2]];
+  return [t, ''];
+}
+function txHighlight(text){
+  return String(text || '').split('\n').map(line => {
+    const tl = line.trim();
+    if (!tl) return esc(line);
+    if (/^[-–—_]{2,}/.test(tl)) return `<span class="h-d">${esc(line)}</span>`;
+    if (tl[0] === '#') return `<span class="h-b">${esc(line)}</span>`;
+    if (/^[-–—•]/.test(tl)) return `<span class="h-s">${esc(line)}</span>`;
+    if (tl[0] === '*') return `<span class="h-n">${esc(line)}</span>`;
+    const hid = TX_HID.test(tl), [a, b] = txSplit(line);
+    return `<span class="h-p${hid ? ' h-x' : ''}">${esc(a)}</span>${b ? `<span class="h-m">${esc(b)}</span>` : ''}`;
+  }).join('\n') + '\n';
+}
+function txSummary(m){
+  const bl = m.items.filter(b => b.kind === 'block').length, pt = m.items.reduce((a, b) => a + (b.children || []).length, 0), t = totalMin(m);
+  return `${bl} ${pl(bl, 'blok', 'bloki', 'bloków')} · ${pt} ${pl(pt, 'punkt', 'punkty', 'punktów')}${t ? ' · ' + t + ' min' : ''}`;
+}
+let txT = null;
+function applyText(mid, text, final){
+  const m = S.meetings[mid]; if (!m) return;
+  const next = textToItems(text, m.items);
+  if (final) S.txUndo = null;
+  if (JSON.stringify(next) === JSON.stringify(m.items)) return;
+  if (S.txUndo !== mid) { pushUndo(m, 'edycja tekstu'); S.txUndo = final ? null : mid; }
+  m.items = next;
+  persist('meetings', m.id);
+  const tot = $('#m-total'); if (tot) tot.textContent = totalMin(m) + ' min';
+  const sm = $('#tx-sum'); if (sm) sm.textContent = txSummary(m);
+  const ub = $('[data-act=undo]'); if (ub) ub.disabled = false;
+}
+function textEditorHtml(m){
+  return `<div class="tx-wrap">
+    <p class="tx-legend"><code># Blok</code> <code>Punkt - Imię, 5 min</code> <code>- do powiedzenia</code> <code>* dla Ciebie</code> <code>--- przerywnik ---</code></p>
+    <div class="tx-box"><pre class="tx-hl" id="tx-hl" aria-hidden="true">${txHighlight(itemsToText(m.items))}</pre><textarea id="m-text" class="tx" data-tx spellcheck="false" autocapitalize="sentences" aria-label="Plan jako tekst" placeholder="# 🏁 Rozpoczęcie&#10;Powitanie - Daniel, 2 min&#10;- Hej, witajcie!&#10;* mów wolniej">${esc(itemsToText(m.items))}</textarea></div>
+    <p class="tx-sum"><span id="tx-sum">${txSummary(m)}</span><span>Zapisuje się samo. Bloki zobaczą to samo.</span></p>
+  </div>`;
+}
 function cloneItems(items){ return clone(items).map(function re(it){ it.id = rid(); if (it.children) it.children = it.children.map(re); return it; }); }
 
 const S = {
-  mode: 'loading', loaded: false, meetings: {}, zjazdy: {}, games: {}, ann: {}, people: {}, view: 'home', tab: lsGet('mc-tab') || 'beloved',
+  mode: 'loading', loaded: false, meetings: {}, zjazdy: {}, games: {}, ann: {}, people: {}, view: 'home', tab: lsGet('mc-tab') || 'beloved', editMode: lsGet('mc-edit-mode') === 'text' ? 'text' : 'blocks',
   openId: null, expanded: new Set(), showPast: false, sheet: null, undo: [], sync: 'loading', needsRender: false, confirm: null,
 };
 let FDB = null, AUTH = null, ME = null, IS_ADMIN = false, stopStage = null;
@@ -678,6 +890,7 @@ function softRender(){
   if (a && a.closest && a.closest('#app') && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { S.needsRender = true; return; }
   render();
 }
+document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.tx !== undefined && cur()) { clearTimeout(txT); applyText(cur().id, e.target.value, true); } });
 document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (S.needsRender && !(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) render(); }, 0));
 function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
 
@@ -859,9 +1072,9 @@ function editorHtml(){
       </div>
       ${m.initiative === 'sum' ? `<label class="fld"><span>MC sesji</span><input id="m-mc" data-mf="mc" value="${esc(m.mc || '')}" placeholder="imiona po przecinku" list="dl-names"></label>` : ''}
     </section>
-    <div class="list-tools"><button type="button" class="btn sm${S.gaps ? ' on' : ''}" data-act="gaps" aria-pressed="${!!S.gaps}">${S.gaps ? 'Ukryj luki' : 'Pokaż luki'} (${gapCount(m)})</button></div>
-    <ol class="items">${m.items.map((it, i) => itemHtml(it, i, m.items.length, null)).join('')}</ol>
-    <div class="add-row"><button type="button" class="btn" data-act="add-block">+ Blok</button><button type="button" class="btn" data-act="add-divider">+ Przerywnik</button></div>
+    <div class="list-tools"><div class="seg" role="group" aria-label="Widok planu"><button type="button" class="btn sm${S.editMode !== 'text' ? ' on' : ''}" data-act="edit-mode" data-v="blocks" aria-pressed="${S.editMode !== 'text'}">Bloki</button><button type="button" class="btn sm${S.editMode === 'text' ? ' on' : ''}" data-act="edit-mode" data-v="text" aria-pressed="${S.editMode === 'text'}">Tekst</button></div><span class="sp"></span>${S.editMode === 'text' ? '' : `<button type="button" class="btn sm${S.gaps ? ' on' : ''}" data-act="gaps" aria-pressed="${!!S.gaps}">${S.gaps ? 'Ukryj luki' : 'Pokaż luki'} (${gapCount(m)})</button>`}</div>
+    ${S.editMode === 'text' ? textEditorHtml(m) : `<ol class="items">${m.items.map((it, i) => itemHtml(it, i, m.items.length, null)).join('')}</ol>
+    <div class="add-row"><button type="button" class="btn" data-act="add-block">+ Blok</button><button type="button" class="btn" data-act="add-divider">+ Przerywnik</button></div>`}
     <section class="tools">
       <button type="button" class="btn primary" data-act="stage-link">Wyślij link sceny</button>
       <button type="button" class="btn" data-act="download">Pobierz na telefon</button>
@@ -1182,6 +1395,7 @@ function helpHtml(){
   const sec = (q, body, open) => `<details class="help"${open ? ' open' : ''}><summary>${q}</summary><div>${body}</div></details>`;
   return `<h2>Instrukcja</h2><p>Pulpit MC służy do dwóch rzeczy: szybko przygotować plan spotkania i poprowadzić je z telefonu.</p>
   ${sec('Jak przygotować spotkanie?', `<ol><li>Wybierz zakładkę (Beloved, Source Youth albo SUM) i dotknij „+ Nowe spotkanie”. Ten przycisk widzi osoba z dostępem do całej zakładki. Jeśli go nie masz, edytujesz spotkania, które Ci udostępniono.</li><li>W „Na bazie” wybierz szablon MC albo skopiuj plan z poprzedniego spotkania.</li><li>Dotknij punktu, żeby go otworzyć. Wpisz, kto prowadzi, ile trwa, co mówisz („Do powiedzenia”) i przypomnienie tylko dla siebie („Uwaga dla MC”).</li><li>Kolejność zmienisz, przeciągając za ⠿ albo strzałkami. Punkt, który może wrócić, lepiej ukryć niż usuwać.</li><li>„Pokaż luki” zaznacza punkty bez prowadzącego albo bez notatki.</li></ol><p>Wszystko zapisuje się samo.</p>`, true)}
+  ${sec('Jak pisać plan jak notatki?', `<p>W spotkaniu przełącz „Bloki” na „Tekst”. To ten sam plan: zmiana w tekście od razu jest w blokach i na odwrót.</p><ul><li><code># Blok</code>: linia z krzyżykiem zaczyna blok, np. <code># 🎳 Gra - Daniel, 10 min</code>.</li><li>Zwykła linia to punkt. Po myślniku możesz dopisać imię i czas: <code>Powitanie - Ola, 2 min</code>. Oba są opcjonalne.</li><li><code>- tekst</code> to to, co mówisz, a <code>* tekst</code> to uwaga tylko dla Ciebie.</li><li><code>--- Słowo / grupki ---</code> to przerywnik.</li><li><code>(ukryte)</code> na początku nazwy ukrywa punkt na scenie.</li></ul><p>Na scenie dotknij ☰ i wybierz „Cały tekst”, żeby czytać cały plan jak kartkę. Bieżący punkt jest podświetlony, a „Dalej” przewija do następnego.</p>`)}
   ${sec('Jak prowadzić ze sceny?', `<ul><li>„Scena” otwiera plan od początku, a „▶ Scena od tego punktu” od wybranego miejsca.</li><li>„Dalej” albo przesunięcie palcem w lewo to następny punkt, ‹ to poprzedni. Nazwa następnego punktu jest na przycisku „Dalej”, a poprzedniego w szarej linii „było”.</li><li>☰ w lewym górnym rogu pokazuje cały plan. Dotknij punktu, żeby tam przejść.</li><li>A− i A+ zmieniają wielkość tekstu.</li><li>Żeby wyjść, przytrzymaj „Wyjdź”.</li><li>Pomarańczowa kropka przy zegarze oznacza, że ekran może zgasnąć. Ustaw w telefonie dłuższą autoblokadę.</li></ul>`)}
   ${sec('Jak dać plan komuś, kto nie ma konta?', `<p>W spotkaniu dotknij „Wyślij link sceny” i wyślij link. Otworzy się w każdej przeglądarce, bez logowania. To kopia planu z tej chwili: po zmianach wyślij nowy link.</p>`)}
   ${sec('Jak korzystać z bazy gier?', `<ul><li>Zakładka „Baza”: szukaj po nazwie i opisie, filtruj po kategorii i energii, a „🎲 Losuj” podsunie grę, której dawno nie było.</li><li>W planie otwórz punkt i dotknij „🎳 Wstaw grę”. Czas, zasady i link trafią do planu.</li><li>Czerwony znacznik „była DD.MM” oznacza, że gra była w ostatnich 3 tygodniach.</li><li>Dopisuj zasady, miejsce i sprzęt. „Brak opisu” pokazuje, czego jeszcze brakuje.</li></ul>`)}
@@ -1305,7 +1519,7 @@ function openStage(startId){
   S.view = 'stage';
   const host = $('#stage-root'); host.hidden = false; $('#app').hidden = true;
   try { const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (r && r.catch) r.catch(() => {}); } catch (e) {}
-  stopStage = mountStage(host, stageData(m), { startId: startId || null, onExit: (ix, times) => {
+  stopStage = mountStage(host, stageData(m), { startId: startId || null, mode: S.editMode === 'text' ? 'text' : 'slide', onExit: (ix, times) => {
     if (times && Object.keys(times).length) { m.actual = Object.assign({}, m.actual || {}, times); m.actualAt = Date.now(); persist('meetings', m.id); }
     host.hidden = true; $('#app').hidden = false; S.view = 'editor'; stopStage = null;
     try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
@@ -1423,6 +1637,7 @@ document.addEventListener('click', e => {
     case 'reuse': { const src = S.meetings[a.dataset.mid]; S.sheet = { type: 'new', init: src.initiative, zid: src.initiative === 'sum' ? src.zjazdId : null, base: src.id }; render(); break; }
     case 'undo': doUndo(); break;
     case 'gaps': S.gaps = !S.gaps; render(); break;
+    case 'edit-mode': { const ta = $('#m-text'); if (ta && cur()) { clearTimeout(txT); applyText(cur().id, ta.value, true); } S.editMode = a.dataset.v; lsSet('mc-edit-mode', S.editMode); render(); break; }
     case 'clear-times': delete m.actual; delete m.actualAt; persist('meetings', m.id); render(); toast('Wyczyszczono zapisane czasy.'); break;
     case 'toggle': { const id = li.dataset.id; S.expanded.has(id) ? S.expanded.delete(id) : S.expanded.add(id); render(); break; }
     case 'up': case 'down': { const j = r.index + (act === 'up' ? -1 : 1); if (j < 0 || j >= r.list.length) break; pushUndo(m, 'przesunięcie'); [r.list[r.index], r.list[j]] = [r.list[j], r.list[r.index]]; persist('meetings', m.id); render(); break; }
@@ -1452,6 +1667,7 @@ document.addEventListener('input', e => {
   if (t.dataset.q !== undefined) { S.q = t.value; const box = $('#arch-results'); if (box) box.innerHTML = archiveResults(t.dataset.q); return; }
   if (t.tagName === 'TEXTAREA') autosize(t);
   const m = cur();
+  if (t.dataset.tx !== undefined && m) { const hl = $('#tx-hl'); if (hl) hl.innerHTML = txHighlight(t.value); clearTimeout(txT); const mid = m.id, v = t.value; txT = setTimeout(() => applyText(mid, v), 400); return; }
   if (t.dataset.f && m) {
     const li = t.closest('[data-id]'), r = find(m, li.dataset.id); if (!r) return;
     const k = t.dataset.f;

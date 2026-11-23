@@ -177,6 +177,14 @@ body.is-dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
 .tx::placeholder{color:var(--ink-2);-webkit-text-fill-color:var(--ink-2)}
 .tx::selection{background:var(--accent-soft)}
 .h-b,.h-d{color:var(--accent)}
+.zt-sess{display:flex;flex-direction:column;gap:var(--s2);padding-top:var(--s4);border-top:3px solid var(--accent)}
+.zt-head{display:flex;align-items:flex-start;gap:var(--s2)}
+.zt-head h2{margin:0;font-family:var(--font-display);font-size:22px;line-height:1.2}
+.zt-head p{margin:2px 0 0;color:var(--ink-2);font-size:14px}
+.zt-head .btn{margin-left:auto;flex:0 0 auto}
+.tx.tx-z{min-height:0}
+.zt-jump{display:flex;gap:6px;flex-wrap:wrap}
+.zt-jump a{font-size:14px;font-weight:700;padding:6px 12px;border-radius:999px;background:var(--surface-2);color:var(--ink);text-decoration:none}
 .h-m,.h-s{color:var(--ink-2)}
 .h-n{color:var(--tx-note)}
 .h-x{text-decoration:line-through;color:var(--ink-2)}
@@ -711,7 +719,7 @@ function txSummary(m){
   const bl = m.items.filter(b => b.kind === 'block').length, pt = m.items.reduce((a, b) => a + (b.children || []).length, 0), t = totalMin(m);
   return `${bl} ${pl(bl, 'blok', 'bloki', 'bloków')} · ${pt} ${pl(pt, 'punkt', 'punkty', 'punktów')}${t ? ' · ' + t + ' min' : ''}`;
 }
-let txT = null;
+const txTs = {};
 function applyText(mid, text, final){
   const m = S.meetings[mid]; if (!m) return;
   const next = textToItems(text, m.items);
@@ -891,7 +899,7 @@ function render(){
   if (S.mode === 'auth' || S.mode === 'denied') { $('#app').innerHTML = authHtml(); return; }
   if (S.view === 'editor' && (!cur() || cur().deletedAt)) S.view = 'home';
   const keep = {}; document.querySelectorAll('#app .sheet [id]').forEach(el => { if ('value' in el && el.type !== 'checkbox') keep[el.id] = el.value; });
-  $('#app').innerHTML = (S.view === 'editor' ? editorHtml() : homeHtml()) + (S.sheet ? sheetHtml() : '');
+  $('#app').innerHTML = (S.view === 'editor' ? editorHtml() : S.view === 'zjtext' && S.zjazdy[S.zid] ? zjTextHtml() : homeHtml()) + (S.sheet ? sheetHtml() : '');
   for (const id in keep) { const el = document.getElementById(id); if (el && el.closest('.sheet') && !el.readOnly) el.value = keep[id]; }
   document.querySelectorAll('textarea').forEach(autosize);
 }
@@ -901,7 +909,7 @@ function softRender(){
   if (a && a.closest && a.closest('#app') && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { S.needsRender = true; return; }
   render();
 }
-document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.tx !== undefined && cur()) { clearTimeout(txT); applyText(cur().id, e.target.value, true); } });
+document.addEventListener('change', e => { const t = e.target; if (!t.dataset || t.dataset.tx === undefined) return; const mid = t.dataset.tx || (cur() && cur().id); if (!mid) return; clearTimeout(txTs[mid]); applyText(mid, t.value, true); });
 document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (S.needsRender && !(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) render(); }, 0));
 function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
 
@@ -1044,7 +1052,7 @@ function zjazdHtml(z){
       <label class="fld"><span>Zespół MC (imiona po przecinku)</span><input id="z-${z.id}-team" data-zf="team" value="${esc(z.team)}"></label>
       <div class="row">${IS_ADMIN ? `<button type="button" class="btn sm" data-act="members" data-kind="zjazdy" data-oid="${z.id}">Kto widzi (${(z.members || []).length})</button>` : ''}<button type="button" class="btn sm danger-ghost" data-act="del-zjazd">Przenieś zjazd do kosza</button></div>` : ''}
     ${ss.length ? `<div class="cards">${ss.map(cardHtml).join('')}</div>` : '<p class="empty">Brak sesji w tym zjeździe.</p>'}
-    ${canCreate('sum') ? '<div class="row"><button type="button" class="btn" data-act="new" data-k="sum">+ Sesja</button></div>' : ''}
+    <div class="row">${ss.length ? `<button type="button" class="btn" data-act="zj-text" data-zid="${z.id}">📄 Cały zjazd jako tekst</button>` : ''}${canCreate('sum') ? '<button type="button" class="btn" data-act="new" data-k="sum">+ Sesja</button>' : ''}</div>
   </section>`;
 }
 function homeTrashHtml(){
@@ -1063,13 +1071,35 @@ function homeTrashHtml(){
   </ul></details>`;
 }
 
-function prepHtml(m){
+function prepHtml(m, bound){
   const lbl = m.initiative === 'sum' ? 'Przed sesją' : 'Przed spotkaniem', v = m.prep || '';
   const peek = v.trim() ? v.trim().split('\n')[0].slice(0, 140) : 'Notatki do przygotowania. Nie widać ich na scenie.';
-  return `<details class="prep" data-prep${S.prepOpen && S.prepOpen.has(m.id) ? ' open' : ''}>
+  return `<details class="prep" data-prep="${m.id}"${S.prepOpen && S.prepOpen.has(m.id) ? ' open' : ''}>
     <summary><span class="prep-h">📋 ${lbl}<span class="prep-tag">nie na scenę</span></span><span class="prep-peek">${esc(peek)}</span></summary>
-    <label class="fld"><span>Notatka ${m.initiative === 'sum' ? 'przed sesją' : 'przed spotkaniem'}</span><textarea id="m-prep" data-mf="prep" rows="3" placeholder="Co ustalić i przygotować przed wejściem na scenę. Tego nie ma na scenie ani w linku sceny.">${esc(v)}</textarea></label>
+    <label class="fld"><span>Notatka ${m.initiative === 'sum' ? 'przed sesją' : 'przed spotkaniem'}</span><textarea ${bound ? `id="zp-${m.id}" data-pm="${m.id}"` : 'id="m-prep" data-mf="prep"'} rows="3" placeholder="Co ustalić i przygotować przed wejściem na scenę. Tego nie ma na scenie ani w linku sceny.">${esc(v)}</textarea></label>
   </details>`;
+}
+function zjTextHtml(){
+  const z = S.zjazdy[S.zid], ss = sessionsOf(S.zid);
+  const sess = m => `<section class="zt-sess" id="zt-${m.id}">
+      <div class="zt-head"><div><h2>${esc(m.title || 'Sesja')}</h2><p>${esc([fmtDate(m.date), m.start, m.mc ? 'MC: ' + m.mc : 'MC: brak'].filter(Boolean).join(' · '))}</p></div>
+        <button type="button" class="btn sm" data-act="open" data-mid="${m.id}">Otwórz</button></div>
+      ${prepHtml(m, true)}
+      <div class="tx-box"><pre class="tx-hl" aria-hidden="true">${txHighlight(itemsToText(m.items))}</pre><textarea class="tx tx-z" data-tx="${m.id}" spellcheck="false" autocapitalize="sentences" aria-label="Plan: ${esc(m.title || 'sesja')}">${esc(itemsToText(m.items))}</textarea></div>
+    </section>`;
+  return `<header class="bar">
+    <button type="button" class="btn ghost" data-act="home">‹ Spotkania</button><span class="sp"></span>
+  </header>
+  <main class="wrap">
+    <section class="meta-card">
+      <div class="eyebrow"><span>SUM · cały zjazd jako tekst</span>${syncHtml()}</div>
+      <h1 class="title-input" style="margin:0">${esc(z ? z.title : 'Zjazd')}</h1>
+      ${ss.length > 1 ? `<nav class="zt-jump" aria-label="Sesje">${ss.map(m => `<a href="#zt-${m.id}" data-act="zt-jump" data-mid="${m.id}">${esc(m.title || 'Sesja')}</a>`).join('')}</nav>` : ''}
+      <p class="tx-legend"><code># Blok</code> <code>Punkt - Imię, 5 min</code> <code>- do powiedzenia</code> <code>* dla Ciebie</code> <code>--- przerywnik ---</code></p>
+    </section>
+    ${ss.length ? ss.map(sess).join('') : '<p class="empty">Ten zjazd nie ma jeszcze sesji.</p>'}
+    <p class="tx-sum"><span></span><span>Zapisuje się samo. Każda sesja ma też swój widok bloków.</span></p>
+  </main>`;
 }
 function editorHtml(){
   const m = cur(), zj = m.zjazdId && S.zjazdy[m.zjazdId];
@@ -1420,7 +1450,7 @@ function helpHtml(){
   ${sec('Jak dać plan komuś, kto nie ma konta?', `<p>W spotkaniu dotknij „Wyślij link sceny” i wyślij link. Otworzy się w każdej przeglądarce, bez logowania. To kopia planu z tej chwili: po zmianach wyślij nowy link.</p>`)}
   ${sec('Jak korzystać z bazy gier?', `<ul><li>Zakładka „Baza”: szukaj po nazwie i opisie, filtruj po kategorii i energii, a „🎲 Losuj” podsunie grę, której dawno nie było.</li><li>W planie otwórz punkt i dotknij „🎳 Wstaw grę”. Czas, zasady i link trafią do planu.</li><li>Czerwony znacznik „była DD.MM” oznacza, że gra była w ostatnich 3 tygodniach.</li><li>Dopisuj zasady, miejsce i sprzęt. „Brak opisu” pokazuje, czego jeszcze brakuje.</li></ul>`)}
   ${canAnn() ? sec('Jak działają ogłoszenia?', `<p>W „Baza → Ogłoszenia” wpisz ogłoszenie raz, z datą ważności i grupą. W planie dotknij „📣 Wstaw ogłoszenie”, a zobaczysz tylko te aktualne w dniu spotkania.</p>`) : ''}
-  ${sec('Jak zaplanować zjazd SUM?', `<p>W zakładce SUM dodaj zjazd, uzupełnij daty i zespół MC, a potem dodawaj sesje. Każda sesja ma własny plan i swoje „MC sesji”.</p>`)}
+  ${sec('Jak zaplanować zjazd SUM?', `<p>W zakładce SUM dodaj zjazd, uzupełnij daty i zespół MC, a potem dodawaj sesje. Każda sesja ma własny plan i swoje „MC sesji”. Przycisk „📄 Cały zjazd jako tekst” pokazuje wszystkie sesje jedna pod drugą. Zmiany tam to te same dane co w sesjach, nie osobna kopia.</p>`)}
   ${sec('Do czego jest 🧪 Piaskownica?', `<p>To wspólne miejsce do ćwiczeń. Każdy z dostępem może tu założyć spotkanie, widzi ćwiczenia innych i może je razem z nimi zmieniać. Nic stąd nie trafia do archiwum ani do statystyk gier. Na karcie widać, kto zaczął ćwiczenie.</p>`)}
   ${sec('Co, jeśli coś usunę albo zepsuję?', `<ul><li>„Cofnij” na górze odwraca ostatnie zmiany.</li><li>„Kosz elementów” i „Historia wersji” są na dole spotkania.</li><li>Usunięte spotkania leżą w koszu na stronie głównej przez 30 dni.</li></ul>`)}
   ${sec('Czy działa bez internetu?', `<p>Tak, jeśli plan był wcześniej otwarty na tym telefonie. Zmiany wyślą się, gdy wróci sieć. Na wszelki wypadek „Pobierz na telefon” zapisze plik, który działa całkiem bez sieci.</p>`)}
@@ -1603,6 +1633,8 @@ document.addEventListener('click', e => {
   switch (act) {
     case 'tab': S.tab = a.dataset.k; lsSet('mc-tab', S.tab); S.showPast = false; S.q = ''; render(); break;
     case 'open': openMeeting(a.dataset.mid); break;
+    case 'zj-text': { S.zid = a.dataset.zid; S.view = 'zjtext'; S.openId = null; render(); window.scrollTo(0, 0); break; }
+    case 'zt-jump': { e.preventDefault(); const el = document.getElementById('zt-' + a.dataset.mid); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
     case 'home': S.view = 'home'; S.openId = null; render(); window.scrollTo(0, 0); break;
     case 'show-past': S.showPast = true; render(); break;
     case 'new': S.sheet = { type: 'new', init: a.dataset.k, zid: a.closest('[data-zid]') ? a.closest('[data-zid]').dataset.zid : null }; render(); setTimeout(() => { const t = $('#n-title'); if (t && matchMedia('(pointer:fine)').matches) t.focus(); }, 0); break;
@@ -1657,7 +1689,7 @@ document.addEventListener('click', e => {
     case 'reuse': { const src = S.meetings[a.dataset.mid]; S.sheet = { type: 'new', init: src.initiative, zid: src.initiative === 'sum' ? src.zjazdId : null, base: src.id }; render(); break; }
     case 'undo': doUndo(); break;
     case 'gaps': S.gaps = !S.gaps; render(); break;
-    case 'edit-mode': { const ta = $('#m-text'); if (ta && cur()) { clearTimeout(txT); applyText(cur().id, ta.value, true); } S.editMode = a.dataset.v; lsSet('mc-edit-mode', S.editMode); render(); break; }
+    case 'edit-mode': { const ta = $('#m-text'); if (ta && cur()) { clearTimeout(txTs[cur().id]); applyText(cur().id, ta.value, true); } S.editMode = a.dataset.v; lsSet('mc-edit-mode', S.editMode); render(); break; }
     case 'clear-times': delete m.actual; delete m.actualAt; persist('meetings', m.id); render(); toast('Wyczyszczono zapisane czasy.'); break;
     case 'toggle': { const id = li.dataset.id; S.expanded.has(id) ? S.expanded.delete(id) : S.expanded.add(id); render(); break; }
     case 'up': case 'down': { const j = r.index + (act === 'up' ? -1 : 1); if (j < 0 || j >= r.list.length) break; pushUndo(m, 'przesunięcie'); [r.list[r.index], r.list[j]] = [r.list[j], r.list[r.index]]; persist('meetings', m.id); render(); break; }
@@ -1687,7 +1719,8 @@ document.addEventListener('input', e => {
   if (t.dataset.q !== undefined) { S.q = t.value; const box = $('#arch-results'); if (box) box.innerHTML = archiveResults(t.dataset.q); return; }
   if (t.tagName === 'TEXTAREA') autosize(t);
   const m = cur();
-  if (t.dataset.tx !== undefined && m) { const hl = $('#tx-hl'); if (hl) hl.innerHTML = txHighlight(t.value); clearTimeout(txT); const mid = m.id, v = t.value; txT = setTimeout(() => applyText(mid, v), 400); return; }
+  if (t.dataset.tx !== undefined && (t.dataset.tx || m)) { const mid = t.dataset.tx || m.id, hl = t.dataset.tx ? t.parentNode.querySelector('.tx-hl') : $('#tx-hl'); if (hl) hl.innerHTML = txHighlight(t.value); clearTimeout(txTs[mid]); const v = t.value; txTs[mid] = setTimeout(() => applyText(mid, v), 400); return; }
+  if (t.dataset.pm) { const pm = S.meetings[t.dataset.pm]; if (pm) { pm.prep = t.value; persist('meetings', pm.id); } return; }
   if (t.dataset.f && m) {
     const li = t.closest('[data-id]'), r = find(m, li.dataset.id); if (!r) return;
     const k = t.dataset.f;
@@ -1701,7 +1734,7 @@ document.addEventListener('input', e => {
     const z = S.zjazdy[t.closest('[data-zid]').dataset.zid]; z[t.dataset.zf] = t.value; persist('zjazdy', z.id);
   }
 });
-document.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('details[data-prep]') || !cur()) return; S.prepOpen = S.prepOpen || new Set(); d.open ? S.prepOpen.add(cur().id) : S.prepOpen.delete(cur().id); if (d.open) { const t = d.querySelector('textarea'); if (t) autosize(t); } }, true);
+document.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('details[data-prep]')) return; S.prepOpen = S.prepOpen || new Set(); const pid = d.dataset.prep; d.open ? S.prepOpen.add(pid) : S.prepOpen.delete(pid); if (d.open) { const t = d.querySelector('textarea'); if (t) autosize(t); } }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) { S.sheet = null; render(); } });
 document.addEventListener('change', e => {
   const t = e.target;

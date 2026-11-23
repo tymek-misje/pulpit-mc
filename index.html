@@ -1089,22 +1089,24 @@ function zjAllText(zid){
   const head = [z ? z.title : 'Zjazd', z && z.dates && !(z.title || '').replace(/[–—]/g, '-').includes(z.dates.replace(/[–—]/g, '-')) ? z.dates : ''].filter(Boolean).join(' · ');
   return head + '\n\n' + ss.map(m => {
     const prep = (m.prep || '').trim();
-    return zjSessHead(m) + '\n' + (prep ? prep.split('\n').map(l => '> ' + l).join('\n') + '\n' : '') + itemsToText(m.items).replace(/\s+$/, '');
-  }).join('\n\n') + '\n';
+    const plan = (m.items || []).map(it => itemsToText([it]).trim()).filter(Boolean).join('\n\n');
+    return zjSessHead(m) + '\n' + (prep ? prep.split('\n').map(l => '> ' + l).join('\n') + '\n' : '') + '\n' + ZJ_PLAN + '\n' + plan;
+  }).join('\n\n\n') + '\n';
 }
 function zjHighlight(text){
   return String(text || '').split('\n').map(line => {
     const tl = line.trim();
     if (/^==.*==$/.test(tl)) return `<span class="h-z">${esc(line)}</span>`;
     if (tl[0] === '>') return `<span class="h-r">${esc(line)}</span>`;
+    if (ZJ_PLAN_RE.test(line)) return `<span class="h-m">${esc(line)}</span>`;
     return txHighlight(line).replace(/\n$/, '');
   }).join('\n') + '\n';
 }
-const ZJ_MARK = /^\s*==.*==\s*$/;
+const ZJ_MARK = /^\s*==.*==\s*$/, ZJ_PLAN = 'Plan sesji:', ZJ_PLAN_RE = /^\s*Plan sesji:\s*$/;
 function applyZjText(zid, text, final){
   const ss = sessionsOf(zid), lines = String(text).split('\n'), segs = [];
   let curSeg = null;
-  lines.forEach(l => { if (ZJ_MARK.test(l)) { curSeg = { prep: [], body: [] }; segs.push(curSeg); } else if (curSeg) { const t = l.replace(/^\s+/, ''); if (t[0] === '>') curSeg.prep.push(t.replace(/^>\s?/, '')); else curSeg.body.push(l); } });
+  lines.forEach(l => { if (ZJ_MARK.test(l)) { curSeg = { prep: [], body: [] }; segs.push(curSeg); } else if (curSeg) { const t = l.replace(/^\s+/, ''); if (t[0] === '>') curSeg.prep.push(t.replace(/^>\s?/, '')); else if (!ZJ_PLAN_RE.test(l)) curSeg.body.push(l); } });
   const warn = $('#zt-warn');
   if (segs.length !== ss.length) { if (warn) { warn.hidden = false; warn.textContent = 'Nie zapisuję: w tekście jest ' + segs.length + ' ' + pl(segs.length, 'nagłówek', 'nagłówki', 'nagłówków') + ' „==”, a sesji jest ' + ss.length + '. Przywróć linie „== … ==” albo cofnij zmianę.'; } return; }
   if (warn) warn.hidden = true;

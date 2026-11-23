@@ -183,6 +183,10 @@ body.is-dragging{-webkit-user-select:none;user-select:none;cursor:grabbing}
 .zt-head p{margin:2px 0 0;color:var(--ink-2);font-size:14px}
 .zt-head .btn{margin-left:auto;flex:0 0 auto}
 .tx.tx-z{min-height:0}
+.h-z{color:var(--accent);font-weight:700}
+.h-r{color:var(--tx-note)}
+.zt-tools{display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap}
+.zt-warn{margin:0;padding:var(--s2) var(--s3);border-radius:10px;background:#fde8e8;color:#8a1c1c;font-size:14px}
 .zt-jump{display:flex;gap:6px;flex-wrap:wrap}
 .zt-jump a{font-size:14px;font-weight:700;padding:6px 12px;border-radius:999px;background:var(--surface-2);color:var(--ink);text-decoration:none}
 .h-m,.h-s{color:var(--ink-2)}
@@ -742,7 +746,7 @@ function textEditorHtml(m){
 function cloneItems(items){ return clone(items).map(function re(it){ it.id = rid(); if (it.children) it.children = it.children.map(re); return it; }); }
 
 const S = {
-  mode: 'loading', loaded: false, meetings: {}, zjazdy: {}, games: {}, ann: {}, people: {}, view: 'home', tab: lsGet('mc-tab') || 'beloved', editMode: lsGet('mc-edit-mode') === 'text' ? 'text' : 'blocks',
+  mode: 'loading', loaded: false, meetings: {}, zjazdy: {}, games: {}, ann: {}, people: {}, view: 'home', tab: lsGet('mc-tab') || 'beloved', editMode: lsGet('mc-edit-mode') === 'text' ? 'text' : 'blocks', zjMode: lsGet('mc-zj-mode') === 'one' ? 'one' : 'split',
   openId: null, expanded: new Set(), showPast: false, sheet: null, undo: [], sync: 'loading', needsRender: false, confirm: null,
 };
 let FDB = null, AUTH = null, ME = null, IS_ADMIN = false, stopStage = null;
@@ -909,7 +913,7 @@ function softRender(){
   if (a && a.closest && a.closest('#app') && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) { S.needsRender = true; return; }
   render();
 }
-document.addEventListener('change', e => { const t = e.target; if (!t.dataset || t.dataset.tx === undefined) return; const mid = t.dataset.tx || (cur() && cur().id); if (!mid) return; clearTimeout(txTs[mid]); applyText(mid, t.value, true); });
+document.addEventListener('change', e => { const t = e.target; if (t.dataset && t.dataset.zt) { clearTimeout(txTs['z' + t.dataset.zt]); applyZjText(t.dataset.zt, t.value, true); return; } if (!t.dataset || t.dataset.tx === undefined) return; const mid = t.dataset.tx || (cur() && cur().id); if (!mid) return; clearTimeout(txTs[mid]); applyText(mid, t.value, true); });
 document.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (S.needsRender && !(a && /INPUT|TEXTAREA|SELECT/.test(a.tagName))) render(); }, 0));
 function autosize(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
 
@@ -1079,8 +1083,39 @@ function prepHtml(m, bound){
     <label class="fld"><span>Notatka ${m.initiative === 'sum' ? 'przed sesją' : 'przed spotkaniem'}</span><textarea ${bound ? `id="zp-${m.id}" data-pm="${m.id}"` : 'id="m-prep" data-mf="prep"'} rows="3" placeholder="Co ustalić i przygotować przed wejściem na scenę. Tego nie ma na scenie ani w linku sceny.">${esc(v)}</textarea></label>
   </details>`;
 }
+function zjSessHead(m){ return '== ' + [m.title || 'Sesja', fmtDate(m.date), m.start, m.mc ? 'MC: ' + m.mc : ''].filter(Boolean).join(' · ') + ' =='; }
+function zjAllText(zid){
+  const z = S.zjazdy[zid], ss = sessionsOf(zid);
+  const head = [z ? z.title : 'Zjazd', z && z.dates && !(z.title || '').replace(/[–—]/g, '-').includes(z.dates.replace(/[–—]/g, '-')) ? z.dates : ''].filter(Boolean).join(' · ');
+  return head + '\n\n' + ss.map(m => {
+    const prep = (m.prep || '').trim();
+    return zjSessHead(m) + '\n' + (prep ? prep.split('\n').map(l => '> ' + l).join('\n') + '\n' : '') + itemsToText(m.items).replace(/\s+$/, '');
+  }).join('\n\n') + '\n';
+}
+function zjHighlight(text){
+  return String(text || '').split('\n').map(line => {
+    const tl = line.trim();
+    if (/^==.*==$/.test(tl)) return `<span class="h-z">${esc(line)}</span>`;
+    if (tl[0] === '>') return `<span class="h-r">${esc(line)}</span>`;
+    return txHighlight(line).replace(/\n$/, '');
+  }).join('\n') + '\n';
+}
+const ZJ_MARK = /^\s*==.*==\s*$/;
+function applyZjText(zid, text, final){
+  const ss = sessionsOf(zid), lines = String(text).split('\n'), segs = [];
+  let curSeg = null;
+  lines.forEach(l => { if (ZJ_MARK.test(l)) { curSeg = { prep: [], body: [] }; segs.push(curSeg); } else if (curSeg) { const t = l.replace(/^\s+/, ''); if (t[0] === '>') curSeg.prep.push(t.replace(/^>\s?/, '')); else curSeg.body.push(l); } });
+  const warn = $('#zt-warn');
+  if (segs.length !== ss.length) { if (warn) { warn.hidden = false; warn.textContent = 'Nie zapisuję: w tekście jest ' + segs.length + ' ' + pl(segs.length, 'nagłówek', 'nagłówki', 'nagłówków') + ' „==”, a sesji jest ' + ss.length + '. Przywróć linie „== … ==” albo cofnij zmianę.'; } return; }
+  if (warn) warn.hidden = true;
+  segs.forEach((g, i) => {
+    const m = ss[i], prep = g.prep.join('\n').trim();
+    if (prep !== (m.prep || '').trim()) { m.prep = prep; persist('meetings', m.id); }
+    applyText(m.id, g.body.join('\n'), final);
+  });
+}
 function zjTextHtml(){
-  const z = S.zjazdy[S.zid], ss = sessionsOf(S.zid);
+  const z = S.zjazdy[S.zid], ss = sessionsOf(S.zid), one = S.zjMode === 'one';
   const sess = m => `<section class="zt-sess" id="zt-${m.id}">
       <div class="zt-head"><div><h2>${esc(m.title || 'Sesja')}</h2><p>${esc([fmtDate(m.date), m.start, m.mc ? 'MC: ' + m.mc : 'MC: brak'].filter(Boolean).join(' · '))}</p></div>
         <button type="button" class="btn sm" data-act="open" data-mid="${m.id}">Otwórz</button></div>
@@ -1094,10 +1129,13 @@ function zjTextHtml(){
     <section class="meta-card">
       <div class="eyebrow"><span>SUM · cały zjazd jako tekst</span>${syncHtml()}</div>
       <h1 class="title-input" style="margin:0">${esc(z ? z.title : 'Zjazd')}</h1>
-      ${ss.length > 1 ? `<nav class="zt-jump" aria-label="Sesje">${ss.map(m => `<a href="#zt-${m.id}" data-act="zt-jump" data-mid="${m.id}">${esc(m.title || 'Sesja')}</a>`).join('')}</nav>` : ''}
-      <p class="tx-legend"><code># Blok</code> <code>Punkt - Imię, 5 min</code> <code>- do powiedzenia</code> <code>* dla Ciebie</code> <code>--- przerywnik ---</code></p>
+      ${ss.length > 1 && !one ? `<nav class="zt-jump" aria-label="Sesje">${ss.map(m => `<a href="#zt-${m.id}" data-act="zt-jump" data-mid="${m.id}">${esc(m.title || 'Sesja')}</a>`).join('')}</nav>` : ''}
+      <div class="zt-tools"><div class="seg" role="group" aria-label="Widok zjazdu"><button type="button" class="btn sm${one ? '' : ' on'}" data-act="zj-mode" data-v="split" aria-pressed="${!one}">Sesje osobno</button><button type="button" class="btn sm${one ? ' on' : ''}" data-act="zj-mode" data-v="one" aria-pressed="${one}">Jeden tekst</button></div><span class="sp" style="flex:1"></span><button type="button" class="btn sm" data-act="zj-copy">📋 Kopiuj całość</button></div>
+      <p class="tx-legend"><code># Blok</code> <code>Punkt - Imię, 5 min</code> <code>- do powiedzenia</code> <code>* dla Ciebie</code> <code>--- przerywnik ---</code>${one ? ' <code>== sesja ==</code> <code>&gt; przed sesją</code>' : ''}</p>
     </section>
-    ${ss.length ? ss.map(sess).join('') : '<p class="empty">Ten zjazd nie ma jeszcze sesji.</p>'}
+    ${!ss.length ? '<p class="empty">Ten zjazd nie ma jeszcze sesji.</p>' : one ? `<p class="zt-warn" id="zt-warn" hidden></p>
+    <div class="tx-box"><pre class="tx-hl" aria-hidden="true">${zjHighlight(zjAllText(S.zid))}</pre><textarea class="tx tx-z" data-zt="${S.zid}" spellcheck="false" autocapitalize="sentences" aria-label="Cały zjazd jako jeden tekst">${esc(zjAllText(S.zid))}</textarea></div>
+    <p class="tx-sum"><span>Linie „== … ==” to nagłówki sesji: nie usuwaj ich, a nazwę, godzinę i MC zmieniasz w sesji. Linie „&gt;” to notatka „Przed sesją”.</span></p>` : ss.map(sess).join('')}
     <p class="tx-sum"><span></span><span>Zapisuje się samo. Każda sesja ma też swój widok bloków.</span></p>
   </main>`;
 }
@@ -1634,6 +1672,8 @@ document.addEventListener('click', e => {
     case 'tab': S.tab = a.dataset.k; lsSet('mc-tab', S.tab); S.showPast = false; S.q = ''; render(); break;
     case 'open': openMeeting(a.dataset.mid); break;
     case 'zj-text': { S.zid = a.dataset.zid; S.view = 'zjtext'; S.openId = null; render(); window.scrollTo(0, 0); break; }
+    case 'zj-mode': { const ta = document.querySelector('textarea[data-zt]'); if (ta) { clearTimeout(txTs['z' + ta.dataset.zt]); applyZjText(ta.dataset.zt, ta.value, true); } S.zjMode = a.dataset.v; lsSet('mc-zj-mode', S.zjMode); render(); break; }
+    case 'zj-copy': { const txt = zjAllText(S.zid); const fb = () => { const ta = document.querySelector('textarea[data-zt]'); if (ta) { ta.focus(); ta.select(); toast('Zaznaczyłem tekst, skopiuj go ręcznie.'); } else toast('Nie udało się skopiować. Przełącz na „Jeden tekst” i zaznacz ręcznie.'); }; try { navigator.clipboard.writeText(txt).then(() => toast('Skopiowano cały zjazd.'), fb); } catch (err) { fb(); } break; }
     case 'zt-jump': { e.preventDefault(); const el = document.getElementById('zt-' + a.dataset.mid); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
     case 'home': S.view = 'home'; S.openId = null; render(); window.scrollTo(0, 0); break;
     case 'show-past': S.showPast = true; render(); break;
@@ -1720,6 +1760,7 @@ document.addEventListener('input', e => {
   if (t.tagName === 'TEXTAREA') autosize(t);
   const m = cur();
   if (t.dataset.tx !== undefined && (t.dataset.tx || m)) { const mid = t.dataset.tx || m.id, hl = t.dataset.tx ? t.parentNode.querySelector('.tx-hl') : $('#tx-hl'); if (hl) hl.innerHTML = txHighlight(t.value); clearTimeout(txTs[mid]); const v = t.value; txTs[mid] = setTimeout(() => applyText(mid, v), 400); return; }
+  if (t.dataset.zt) { const hl = t.parentNode.querySelector('.tx-hl'); if (hl) hl.innerHTML = zjHighlight(t.value); const zid = t.dataset.zt, v = t.value; clearTimeout(txTs['z' + zid]); txTs['z' + zid] = setTimeout(() => applyZjText(zid, v), 600); return; }
   if (t.dataset.pm) { const pm = S.meetings[t.dataset.pm]; if (pm) { pm.prep = t.value; persist('meetings', pm.id); } return; }
   if (t.dataset.f && m) {
     const li = t.closest('[data-id]'), r = find(m, li.dataset.id); if (!r) return;

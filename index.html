@@ -79,6 +79,17 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .empty{color:var(--ink-2);margin:0;padding:var(--s4);border:1px dashed var(--line);border-radius:var(--r)}
 
 .meta-card{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s4);background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.prep{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--r);background:var(--accent-soft)}
+.prep>summary{list-style:none;padding:var(--s3) var(--s4);min-height:48px;display:flex;flex-direction:column;justify-content:center;gap:2px;cursor:pointer}
+.prep>summary::-webkit-details-marker{display:none}
+.prep-h{display:flex;align-items:center;gap:var(--s2);font-weight:700}
+.prep-h::after{content:'▾';margin-left:auto;color:var(--ink-2);transition:transform .15s}
+.prep[open] .prep-h::after{transform:rotate(180deg)}
+.prep-tag{font-size:12px;font-weight:700;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:1px 8px}
+.prep-peek{font-size:14px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prep[open] .prep-peek{display:none}
+.prep>.fld{padding:0 var(--s4) var(--s4)}
+.prep textarea{background:var(--surface)}
 .eyebrow{font-size:13px;letter-spacing:.07em;text-transform:uppercase;color:var(--accent);font-weight:700;display:flex;justify-content:space-between;gap:var(--s2);flex-wrap:wrap}
 .title-input{font-family:var(--font-display);font-size:24px;font-weight:700;border:0;background:transparent;padding:4px 0;width:100%;border-bottom:1px solid transparent}
 .title-input:focus{outline:none;border-bottom-color:var(--accent)}
@@ -1052,6 +1063,14 @@ function homeTrashHtml(){
   </ul></details>`;
 }
 
+function prepHtml(m){
+  const lbl = m.initiative === 'sum' ? 'Przed sesją' : 'Przed spotkaniem', v = m.prep || '';
+  const peek = v.trim() ? v.trim().split('\n')[0].slice(0, 140) : 'Notatki do przygotowania. Nie widać ich na scenie.';
+  return `<details class="prep" data-prep${S.prepOpen && S.prepOpen.has(m.id) ? ' open' : ''}>
+    <summary><span class="prep-h">📋 ${lbl}<span class="prep-tag">nie na scenę</span></span><span class="prep-peek">${esc(peek)}</span></summary>
+    <label class="fld"><span>Notatka ${m.initiative === 'sum' ? 'przed sesją' : 'przed spotkaniem'}</span><textarea id="m-prep" data-mf="prep" rows="3" placeholder="Co ustalić i przygotować przed wejściem na scenę. Tego nie ma na scenie ani w linku sceny.">${esc(v)}</textarea></label>
+  </details>`;
+}
 function editorHtml(){
   const m = cur(), zj = m.zjazdId && S.zjazdy[m.zjazdId];
   return `<header class="bar">
@@ -1072,6 +1091,7 @@ function editorHtml(){
       </div>
       ${m.initiative === 'sum' ? `<label class="fld"><span>MC sesji</span><input id="m-mc" data-mf="mc" value="${esc(m.mc || '')}" placeholder="imiona po przecinku" list="dl-names"></label>` : ''}
     </section>
+    ${prepHtml(m)}
     <div class="list-tools"><div class="seg" role="group" aria-label="Widok planu"><button type="button" class="btn sm${S.editMode !== 'text' ? ' on' : ''}" data-act="edit-mode" data-v="blocks" aria-pressed="${S.editMode !== 'text'}">Bloki</button><button type="button" class="btn sm${S.editMode === 'text' ? ' on' : ''}" data-act="edit-mode" data-v="text" aria-pressed="${S.editMode === 'text'}">Tekst</button></div><span class="sp"></span>${S.editMode === 'text' ? '' : `<button type="button" class="btn sm${S.gaps ? ' on' : ''}" data-act="gaps" aria-pressed="${!!S.gaps}">${S.gaps ? 'Ukryj luki' : 'Pokaż luki'} (${gapCount(m)})</button>`}</div>
     ${S.editMode === 'text' ? textEditorHtml(m) : `<ol class="items">${m.items.map((it, i) => itemHtml(it, i, m.items.length, null)).join('')}</ol>
     <div class="add-row"><button type="button" class="btn" data-act="add-block">+ Blok</button><button type="button" class="btn" data-act="add-divider">+ Przerywnik</button></div>`}
@@ -1394,7 +1414,7 @@ function seedGames(){
 function helpHtml(){
   const sec = (q, body, open) => `<details class="help"${open ? ' open' : ''}><summary>${q}</summary><div>${body}</div></details>`;
   return `<h2>Instrukcja</h2><p>Pulpit MC służy do dwóch rzeczy: szybko przygotować plan spotkania i poprowadzić je z telefonu.</p>
-  ${sec('Jak przygotować spotkanie?', `<ol><li>Wybierz zakładkę (Beloved, Source Youth albo SUM) i dotknij „+ Nowe spotkanie”. Ten przycisk widzi osoba z dostępem do całej zakładki. Jeśli go nie masz, edytujesz spotkania, które Ci udostępniono.</li><li>W „Na bazie” wybierz szablon MC albo skopiuj plan z poprzedniego spotkania.</li><li>Dotknij punktu, żeby go otworzyć. Wpisz, kto prowadzi, ile trwa, co mówisz („Do powiedzenia”) i przypomnienie tylko dla siebie („Uwaga dla MC”).</li><li>Kolejność zmienisz, przeciągając za ⠿ albo strzałkami. Punkt, który może wrócić, lepiej ukryć niż usuwać.</li><li>„Pokaż luki” zaznacza punkty bez prowadzącego albo bez notatki.</li></ol><p>Wszystko zapisuje się samo.</p>`, true)}
+  ${sec('Jak przygotować spotkanie?', `<ol><li>Wybierz zakładkę (Beloved, Source Youth albo SUM) i dotknij „+ Nowe spotkanie”. Ten przycisk widzi osoba z dostępem do całej zakładki. Jeśli go nie masz, edytujesz spotkania, które Ci udostępniono.</li><li>W „Na bazie” wybierz szablon MC albo skopiuj plan z poprzedniego spotkania.</li><li>Dotknij punktu, żeby go otworzyć. Wpisz, kto prowadzi, ile trwa, co mówisz („Do powiedzenia”) i przypomnienie tylko dla siebie („Uwaga dla MC”).</li><li>Kolejność zmienisz, przeciągając za ⠿ albo strzałkami. Punkt, który może wrócić, lepiej ukryć niż usuwać.</li><li>„Pokaż luki” zaznacza punkty bez prowadzącego albo bez notatki.</li><li>„📋 Przed sesją” (na Beloved i SY „Przed spotkaniem”) to notatka do przygotowania. Nie widać jej na scenie ani w linku sceny.</li></ol><p>Wszystko zapisuje się samo.</p>`, true)}
   ${sec('Jak pisać plan jak notatki?', `<p>W spotkaniu przełącz „Bloki” na „Tekst”. To ten sam plan: zmiana w tekście od razu jest w blokach i na odwrót.</p><ul><li><code># Blok</code>: linia z krzyżykiem zaczyna blok, np. <code># 🎳 Gra - Daniel, 10 min</code>.</li><li>Zwykła linia to punkt. Po myślniku możesz dopisać imię i czas: <code>Powitanie - Ola, 2 min</code>. Oba są opcjonalne.</li><li><code>- tekst</code> to to, co mówisz, a <code>* tekst</code> to uwaga tylko dla Ciebie.</li><li><code>--- Słowo / grupki ---</code> to przerywnik.</li><li><code>(ukryte)</code> na początku nazwy ukrywa punkt na scenie.</li></ul><p>Na scenie dotknij ☰ i wybierz „Cały tekst”, żeby czytać cały plan jak kartkę. Bieżący punkt jest podświetlony, a „Dalej” przewija do następnego.</p>`)}
   ${sec('Jak prowadzić ze sceny?', `<ul><li>„Scena” otwiera plan od początku, a „▶ Scena od tego punktu” od wybranego miejsca.</li><li>„Dalej” albo przesunięcie palcem w lewo to następny punkt, ‹ to poprzedni. Nazwa następnego punktu jest na przycisku „Dalej”, a poprzedniego w szarej linii „było”.</li><li>☰ w lewym górnym rogu pokazuje cały plan. Dotknij punktu, żeby tam przejść.</li><li>A− i A+ zmieniają wielkość tekstu.</li><li>Żeby wyjść, przytrzymaj „Wyjdź”.</li><li>Pomarańczowa kropka przy zegarze oznacza, że ekran może zgasnąć. Ustaw w telefonie dłuższą autoblokadę.</li></ul>`)}
   ${sec('Jak dać plan komuś, kto nie ma konta?', `<p>W spotkaniu dotknij „Wyślij link sceny” i wyślij link. Otworzy się w każdej przeglądarce, bez logowania. To kopia planu z tej chwili: po zmianach wyślij nowy link.</p>`)}
@@ -1681,6 +1701,7 @@ document.addEventListener('input', e => {
     const z = S.zjazdy[t.closest('[data-zid]').dataset.zid]; z[t.dataset.zf] = t.value; persist('zjazdy', z.id);
   }
 });
+document.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('details[data-prep]') || !cur()) return; S.prepOpen = S.prepOpen || new Set(); d.open ? S.prepOpen.add(cur().id) : S.prepOpen.delete(cur().id); if (d.open) { const t = d.querySelector('textarea'); if (t) autosize(t); } }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.sheet) { S.sheet = null; render(); } });
 document.addEventListener('change', e => {
   const t = e.target;
